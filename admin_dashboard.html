@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ex-GPT 관리자 대시보드</title>
+    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --ex-red: #E31E24;
+            --ex-blue: #0074D9;
+            --ex-dark-blue: #2B4C8C;
+            --ex-brown: #8B4513;
+            --ex-dark-gray: #706F6F;
+            --ex-light-gray: #BEBEBE;
+            --ex-gold: #B8860B;
+            --ex-silver: #A8A8A8;
+        }
+
+        body {
+            font-family: 'Yoon Gothic 120', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, var(--ex-dark-blue) 0%, var(--ex-blue) 50%, var(--ex-dark-gray) 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+        }
+
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 280px;
+            height: 100vh;
+            background: rgba(43, 76, 140, 0.95);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        .sidebar-content {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .logo {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            min-height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            margin-right: 12px;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, var(--ex-blue) 0%, var(--ex-gold) 100%);
+        }
+
+        .logo h1 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 2px;
+        }
+
+        .logo-subtitle {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 400;
+        }
+
+        .nav-section {
+            flex: 1;
+            padding: 16px 0;
+        }
+
+        .nav-group {
+            margin-bottom: 20px;
+        }
+
+        .nav-group-title {
+            padding: 8px 20px;
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 500;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            position: relative;
+        }
+
+        .menu-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+        }
+
+        .menu-item.active {
+            background: rgba(0, 116, 217, 0.15);
+            color: var(--ex-blue);
+            border-right: 2px solid var(--ex-blue);
+        }
+
+        .menu-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .page-title {
+            font-size: 2.5rem;
+            font-weight: 300;
+            color: #ffffff;
+            margin: 0;
+        }
+
+        .admin-badge {
+            background: rgba(227, 30, 36, 0.2);
+            border: 1px solid var(--ex-red);
+            color: var(--ex-red);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            font-weight: 400;
+        }
+
+        .stat-change {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+
+        .stat-change.positive {
+            background: rgba(40, 167, 69, 0.2);
+            color: #28a745;
+        }
+
+        .stat-change.negative {
+            background: rgba(220, 53, 69, 0.2);
+            color: #dc3545;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 24px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .chart-control-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .chart-control-btn:hover,
+        .chart-control-btn.active {
+            background: rgba(255, 255, 255, 0.3);
+            color: #ffffff;
+        }
+
+        .chart-area {
+            height: 300px;
+            position: relative;
+        }
+
+        .data-management {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .data-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .data-card h3 {
+            color: #ffffff;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .upload-area {
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            margin-bottom: 16px;
+        }
+
+        .upload-area:hover {
+            border-color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+            opacity: 0.7;
+        }
+
+        .upload-text {
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 8px;
+        }
+
+        .upload-subtext {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.8rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #ffffff;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: var(--ex-blue);
+            border-color: var(--ex-blue);
+        }
+
+        .btn-primary:hover {
+            background: rgba(0, 116, 217, 0.8);
+        }
+
+        .btn-danger {
+            background: var(--ex-red);
+            border-color: var(--ex-red);
+        }
+
+        .btn-danger:hover {
+            background: rgba(227, 30, 36, 0.8);
+        }
+
+        .data-table {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-top: 16px;
+        }
+
+        .table-header {
+            background: rgba(43, 76, 140, 0.3);
+            padding: 16px;
+            display: grid;
+            grid-template-columns: 1fr 120px 100px 100px;
+            gap: 16px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .table-row {
+            padding: 16px;
+            display: grid;
+            grid-template-columns: 1fr 120px 100px 100px;
+            gap: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .table-row:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .status-active {
+            background: rgba(40, 167, 69, 0.2);
+            color: #28a745;
+        }
+
+        .status-processing {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+        }
+
+        .status-error {
+            background: rgba(220, 53, 69, 0.2);
+            color: #dc3545;
+        }
+
+        /* 섹션별 표시/숨김 */
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                margin-left: 0;
+                padding: 20px;
+            }
+            
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            
+            .data-management {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+        }
+
+        .main-content::-webkit-scrollbar,
+        .sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .main-content::-webkit-scrollbar-track,
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .main-content::-webkit-scrollbar-thumb,
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-content">
+            <div class="logo">
+                <div class="logo-icon">⚙️</div>
+                <div>
+                    <h1>ex-GPT</h1>
+                    <div class="logo-subtitle">관리자 대시보드</div>
+                </div>
+            </div>
+            
+            <div class="nav-section">
+                <div class="nav-group">
+                    <div class="nav-group-title">대시보드</div>
+                    <div class="menu-item active" onclick="showSection('overview')">
+                        <div class="menu-icon">📊</div>
+                        <div>개요</div>
+                    </div>
+                    <div class="menu-item" onclick="showSection('monitoring')">
+                        <div class="menu-icon">📈</div>
+                        <div>실시간 모니터링</div>
+                    </div>
+                </div>
+                
+                <div class="nav-group">
+                    <div class="nav-group-title">시스템</div>
+                    <div class="menu-item" onclick="showSection('settings')">
+                        <div class="menu-icon">⚙️</div>
+                        <div>시스템 설정</div>
+                    </div>
+                    <div class="menu-item" onclick="showSection('logs')">
+                        <div class="menu-icon">📋</div>
+                        <div>로그 관리</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="header">
+            <h1 class="page-title" id="pageTitle">대시보드 개요</h1>
+            <div class="admin-badge">🔑 관리자</div>
+        </div>
+        
+        <!-- 개요 섹션 -->
+        <div id="overview-section" class="section active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">📞</div>
+                        <div class="stat-change positive">+12%</div>
+                    </div>
+                    <div class="stat-value" id="totalRequests">0</div>
+                    <div class="stat-label">총 요청 수</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-change positive">+5</div>
+                    </div>
+                    <div class="stat-value" id="activeUsers">0</div>
+                    <div class="stat-label">활성 사용자</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">🖥️</div>
+                        <div class="stat-change negative">-2%</div>
+                    </div>
+                    <div class="stat-value" id="gpuUsage">0%</div>
+                    <div class="stat-label">GPU 사용률</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">⚡</div>
+                        <div class="stat-change positive">+0.1%</div>
+                    </div>
+                    <div class="stat-value" id="uptime">99.8%</div>
+                    <div class="stat-label">시스템 가동률</div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">시스템 상태</h3>
+                    <div class="chart-controls">
+                        <button class="chart-control-btn active" onclick="refreshStats()">🔄 새로고침</button>
+                    </div>
+                </div>
+                <div class="chart-area">
+                    <div style="padding: 20px; text-align: center; color: rgba(255,255,255,0.7);">
+                        <h4>실시간 시스템 정보</h4>
+                        <div id="systemStatus" style="margin-top: 20px;">
+                            <p>서버 상태: <span id="serverStatus">확인 중...</span></p>
+                            <p>Qdrant 연결: <span id="qdrantStatus">확인 중...</span></p>
+                            <p>임베딩 모델: <span id="embeddingStatus">확인 중...</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 실시간 모니터링 섹션 -->
+        <div id="monitoring-section" class="section">
+            <div class="data-management">
+                <div class="data-card">
+                    <h3>🖥️ 시스템 리소스</h3>
+                    <div style="margin-bottom: 20px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>CPU 사용률</span>
+                            <span id="cpu-usage">확인 중...</span>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.2); height: 8px; border-radius: 4px;">
+                            <div id="cpu-bar" style="background: var(--ex-blue); height: 100%; width: 0%; border-radius: 4px; transition: width 0.3s;"></div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>메모리 사용률</span>
+                            <span id="memory-usage">확인 중...</span>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.2); height: 8px; border-radius: 4px;">
+                            <div id="memory-bar" style="background: var(--ex-gold); height: 100%; width: 0%; border-radius: 4px; transition: width 0.3s;"></div>
+                        </div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn" onclick="refreshMonitoring()">📊 새로고침</button>
+                    </div>
+                </div>
+                
+                <div class="data-card">
+                    <h3>🔥 시스템 로그</h3>
+                    <div id="recent-logs" style="max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.85rem;">
+                        <div style="padding: 8px 0; color: rgba(255,255,255,0.7);">로그를 불러오는 중...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 시스템 설정 섹션 -->
+        <div id="settings-section" class="section">
+            <div class="data-management">
+                <div class="data-card">
+                    <h3>⚙️ 일반 설정</h3>
+                    <div style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <span>시스템 모니터링</span>
+                            <input type="checkbox" checked>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <span>자동 새로고침</span>
+                            <input type="checkbox" checked>
+                        </div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="saveSettings()">💾 설정 저장</button>
+                        <button class="btn" onclick="resetSettings()">🔄 기본값으로</button>
+                    </div>
+                </div>
+                
+                <div class="data-card">
+                    <h3>🔐 시스템 정보</h3>
+                    <div style="margin-bottom: 16px;">
+                        <div style="margin-bottom: 8px;">ex-GPT 버전: v1.0.0</div>
+                        <div style="margin-bottom: 8px;">Python: 3.9+</div>
+                        <div style="margin-bottom: 8px;">Flask: 최신</div>
+                        <div>마지막 업데이트: 2025-06-04</div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn" onclick="checkUpdates()">🔄 업데이트 확인</button>
+                        <button class="btn btn-danger" onclick="restartSystem()">🔄 시스템 재시작</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 로그 관리 섹션 -->
+        <div id="logs-section" class="section">
+            <div class="data-management">
+                <div class="data-card">
+                    <h3>🔍 로그 필터</h3>
+                    <div style="margin-bottom: 16px;">
+                        <select style="width: 100%; padding: 12px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 8px;">
+                            <option>모든 레벨</option>
+                            <option>ERROR</option>
+                            <option>WARNING</option>
+                            <option>INFO</option>
+                            <option>DEBUG</option>
+                        </select>
+                        <input type="text" placeholder="키워드 검색..." style="width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 8px; outline: none;">
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="filterLogs()">🔍 필터 적용</button>
+                        <button class="btn" onclick="clearLogFilter()">🔄 필터 초기화</button>
+                    </div>
+                </div>
+                
+                <div class="data-card">
+                    <h3>📊 로그 통계</h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; text-align: center;">
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 600; color: var(--ex-red);">0</div>
+                            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">오늘 에러</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 600; color: var(--ex-gold);">0</div>
+                            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">오늘 경고</div>
+                        </div>
+                    </div>
+                    <div class="action-buttons" style="margin-top: 16px;">
+                        <button class="btn" onclick="exportLogs()">📥 로그 내보내기</button>
+                        <button class="btn btn-danger" onclick="clearOldLogs()">🗑️ 오래된 로그 삭제</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">실시간 로그</h3>
+                    <div class="chart-controls">
+                        <button class="btn chart-control-btn active" onclick="toggleLogStream(true)">▶️ 실시간</button>
+                        <button class="btn chart-control-btn" onclick="toggleLogStream(false)">⏸️ 일시정지</button>
+                    </div>
+                </div>
+                
+                <div id="log-container" style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 16px; height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.85rem; line-height: 1.4;">
+                    <div style="color: #28a745; margin-bottom: 4px;">[시스템] 로그 스트림 대기 중...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 전역 변수
+        let currentSection = 'overview';
+        let autoRefreshInterval = null;
+
+        // 페이지 로드 시 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('관리자 대시보드 로드됨');
+            
+            // 초기 데이터 로드
+            loadDashboardData();
+            
+            // 5초마다 자동 새로고침
+            autoRefreshInterval = setInterval(loadDashboardData, 5000);
+            
+            // 메뉴 클릭 이벤트 바인딩
+            bindMenuEvents();
+        });
+
+        // 메뉴 클릭 이벤트 바인딩
+        function bindMenuEvents() {
+            const menuItems = document.querySelectorAll('.menu-item');
+            menuItems.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const onclick = this.getAttribute('onclick');
+                    if (onclick) {
+                        try {
+                            eval(onclick);
+                        } catch (error) {
+                            console.error('메뉴 클릭 오류:', error);
+                        }
+                    }
+                });
+            });
+        }
+
+        // 섹션 전환 함수
+        function showSection(sectionName) {
+            console.log('섹션 전환:', sectionName);
+            
+            // 모든 섹션 숨기기
+            const sections = document.querySelectorAll('.section');
+            sections.forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // 모든 메뉴 아이템에서 active 클래스 제거
+            const menuItems = document.querySelectorAll('.menu-item');
+            menuItems.forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // 선택된 섹션 표시
+            const targetSection = document.getElementById(sectionName + '-section');
+            if (targetSection) {
+                targetSection.classList.add('active');
+            }
+            
+            // 선택된 메뉴 아이템에 active 클래스 추가
+            const targetMenuItem = document.querySelector(`[onclick="showSection('${sectionName}')"]`);
+            if (targetMenuItem) {
+                targetMenuItem.classList.add('active');
+            }
+            
+            // 페이지 제목 업데이트
+            const titles = {
+                'overview': '대시보드 개요',
+                'monitoring': '실시간 모니터링',
+                'settings': '시스템 설정',
+                'logs': '로그 관리'
+            };
+            
+            const pageTitle = document.getElementById('pageTitle');
+            if (pageTitle) {
+                pageTitle.textContent = titles[sectionName] || '관리자 대시보드';
+            }
+            
+            currentSection = sectionName;
+            
+            // 섹션별 데이터 로드
+            loadSectionData(sectionName);
+        }
+
+        // 대시보드 데이터 로드
+        async function loadDashboardData() {
+            try {
+                const response = await fetch('/api/admin/dashboard_data');
+                if (response.ok) {
+                    const data = await response.json();
+                    updateDashboardStats(data);
+                } else {
+                    console.error('대시보드 데이터 로드 실패:', response.status);
+                }
+            } catch (error) {
+                console.error('대시보드 데이터 로드 오류:', error);
+            }
+            
+            // 시스템 상태도 함께 확인
+            try {
+                const healthResponse = await fetch('/api/health');
+                if (healthResponse.ok) {
+                    const healthData = await healthResponse.json();
+                    updateSystemStatus(healthData);
+                }
+            } catch (error) {
+                console.error('시스템 상태 확인 오류:', error);
+            }
+        }
+
+        // 대시보드 통계 업데이트
+        function updateDashboardStats(data) {
+            // 기본 통계 업데이트
+            const totalRequests = document.getElementById('totalRequests');
+            const activeUsers = document.getElementById('activeUsers');
+            const gpuUsage = document.getElementById('gpuUsage');
+            const uptime = document.getElementById('uptime');
+            
+            if (totalRequests) totalRequests.textContent = data.total_requests.toLocaleString();
+            if (activeUsers) activeUsers.textContent = data.active_users;
+            if (uptime) uptime.textContent = data.system_uptime;
+            
+            // GPU 사용률 계산
+            if (data.gpu_usage && data.gpu_usage.length > 0) {
+                const avgGpuUsage = data.gpu_usage.reduce((sum, gpu) => 
+                    sum + gpu.utilization_percent, 0) / data.gpu_usage.length;
+                if (gpuUsage) gpuUsage.textContent = Math.round(avgGpuUsage) + '%';
+            } else {
+                if (gpuUsage) gpuUsage.textContent = '0%';
+            }
+            
+            console.log('대시보드 데이터 업데이트 완료');
+        }
+
+        // 시스템 상태 업데이트
+        function updateSystemStatus(healthData) {
+            const serverStatus = document.getElementById('serverStatus');
+            const qdrantStatus = document.getElementById('qdrantStatus');
+            const embeddingStatus = document.getElementById('embeddingStatus');
+            
+            if (serverStatus) {
+                serverStatus.textContent = healthData.status === 'healthy' ? '✅ 정상' : '❌ 오류';
+                serverStatus.style.color = healthData.status === 'healthy' ? '#28a745' : '#dc3545';
+            }
+            
+            if (qdrantStatus) {
+                qdrantStatus.textContent = healthData.qdrant_connected ? '✅ 연결됨' : '❌ 연결 안됨';
+                qdrantStatus.style.color = healthData.qdrant_connected ? '#28a745' : '#dc3545';
+            }
+            
+            if (embeddingStatus) {
+                embeddingStatus.textContent = healthData.embedding_model_loaded ? '✅ 로드됨' : '❌ 로드 안됨';
+                embeddingStatus.style.color = healthData.embedding_model_loaded ? '#28a745' : '#dc3545';
+            }
+        }
+
+        // 섹션별 데이터 로드
+        function loadSectionData(sectionName) {
+            switch(sectionName) {
+                case 'overview':
+                    loadDashboardData();
+                    break;
+                case 'monitoring':
+                    loadMonitoringData();
+                    break;
+                case 'logs':
+                    loadRecentLogs();
+                    break;
+            }
+        }
+
+        // 모니터링 데이터 로드
+        async function loadMonitoringData() {
+            try {
+                // CPU와 메모리 사용률은 임시 값으로 설정 (실제 구현 시 API에서 가져옴)
+                const cpuUsage = Math.floor(Math.random() * 60) + 20; // 20-80%
+                const memoryUsage = Math.floor(Math.random() * 40) + 30; // 30-70%
+                
+                const cpuElement = document.getElementById('cpu-usage');
+                const memoryElement = document.getElementById('memory-usage');
+                const cpuBar = document.getElementById('cpu-bar');
+                const memoryBar = document.getElementById('memory-bar');
+                
+                if (cpuElement) cpuElement.textContent = cpuUsage + '%';
+                if (memoryElement) memoryElement.textContent = memoryUsage + '%';
+                if (cpuBar) cpuBar.style.width = cpuUsage + '%';
+                if (memoryBar) memoryBar.style.width = memoryUsage + '%';
+                
+                console.log('모니터링 데이터 업데이트 완료');
+            } catch (error) {
+                console.error('모니터링 데이터 로드 오류:', error);
+            }
+        }
+
+        // 최근 로그 로드
+        async function loadRecentLogs() {
+            try {
+                const response = await fetch('/api/stats');
+                if (response.ok) {
+                    const data = await response.json();
+                    updateRecentLogs(data.recent_logs || []);
+                }
+            } catch (error) {
+                console.error('로그 로드 오류:', error);
+            }
+        }
+
+        // 최근 로그 업데이트
+        function updateRecentLogs(logs) {
+            const logContainer = document.getElementById('recent-logs');
+            if (!logContainer) return;
+            
+            if (logs.length === 0) {
+                logContainer.innerHTML = '<div style="padding: 8px 0; color: rgba(255,255,255,0.7);">로그가 없습니다.</div>';
+                return;
+            }
+            
+            const logsHtml = logs.slice(0, 10).map(log => {
+                const statusColor = log.status === 'success' ? '#28a745' : 
+                                  log.status === 'error' ? '#dc3545' : '#ffc107';
+                
+                return `
+                    <div style="padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <div style="color: ${statusColor}; font-size: 0.8rem;">${log.timestamp} - ${log.status.toUpperCase()}</div>
+                        <div style="color: rgba(255,255,255,0.8);">${log.type}: ${log.action}</div>
+                    </div>
+                `;
+            }).join('');
+            
+            logContainer.innerHTML = logsHtml;
+        }
+
+        // 실시간 로그 업데이트 (로그 섹션용)
+        function updateLogContainer() {
+            const logContainer = document.getElementById('log-container');
+            if (!logContainer || currentSection !== 'logs') return;
+            
+            const now = new Date().toLocaleString();
+            const colors = ['#28a745', '#17a2b8', '#ffc107'];
+            const levels = ['INFO', 'DEBUG', 'WARNING'];
+            const messages = [
+                '시스템 상태 정상',
+                'API 요청 처리 완료',
+                '데이터베이스 연결 확인',
+                '모델 추론 완료',
+                '사용자 요청 수신'
+            ];
+            
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            const randomLevel = levels[Math.floor(Math.random() * levels.length)];
+            const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+            
+            const newLog = `<div style="color: ${randomColor}; margin-bottom: 4px;">[${now}] ${randomLevel} - ${randomMessage}</div>`;
+            
+            logContainer.insertAdjacentHTML('beforeend', newLog);
+            
+            // 스크롤을 맨 아래로
+            logContainer.scrollTop = logContainer.scrollHeight;
+            
+            // 로그가 너무 많으면 오래된 것 제거
+            const logLines = logContainer.children;
+            if (logLines.length > 50) {
+                logContainer.removeChild(logLines[0]);
+            }
+        }
+
+        // 각종 버튼 함수들
+        function refreshStats() {
+            console.log('통계 새로고침');
+            loadDashboardData();
+        }
+
+        function refreshMonitoring() {
+            console.log('모니터링 새로고침');
+            loadMonitoringData();
+        }
+
+        function saveSettings() {
+            alert('설정이 저장되었습니다.');
+        }
+
+        function resetSettings() {
+            if (confirm('설정을 기본값으로 재설정하시겠습니까?')) {
+                alert('설정이 재설정되었습니다.');
+            }
+        }
+
+        function checkUpdates() {
+            alert('최신 버전입니다.');
+        }
+
+        function restartSystem() {
+            if (confirm('시스템을 재시작하시겠습니까?')) {
+                alert('시스템 재시작이 예약되었습니다.');
+            }
+        }
+
+        function filterLogs() {
+            console.log('로그 필터 적용');
+        }
+
+        function clearLogFilter() {
+            console.log('로그 필터 초기화');
+        }
+
+        function exportLogs() {
+            alert('로그가 내보내기되었습니다.');
+        }
+
+        function clearOldLogs() {
+            if (confirm('오래된 로그를 삭제하시겠습니까?')) {
+                alert('오래된 로그가 삭제되었습니다.');
+            }
+        }
+
+        function toggleLogStream(enable) {
+            console.log('로그 스트림:', enable ? '시작' : '정지');
+            
+            const buttons = document.querySelectorAll('#logs-section .chart-control-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            
+            if (enable) {
+                buttons[0].classList.add('active');
+                // 실시간 로그 시작
+                if (window.logStreamInterval) {
+                    clearInterval(window.logStreamInterval);
+                }
+                window.logStreamInterval = setInterval(updateLogContainer, 2000);
+            } else {
+                buttons[1].classList.add('active');
+                // 실시간 로그 정지
+                if (window.logStreamInterval) {
+                    clearInterval(window.logStreamInterval);
+                    window.logStreamInterval = null;
+                }
+            }
+        }
+
+        // 페이지 언로드 시 정리
+        window.addEventListener('beforeunload', function() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            if (window.logStreamInterval) {
+                clearInterval(window.logStreamInterval);
+            }
+        });
+    </script>
+</body>
+</html>

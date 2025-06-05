@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ex-GPT 관리자 대시보드</title>
+    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --ex-red: #E31E24;
+            --ex-blue: #0074D9;
+            --ex-dark-blue: #2B4C8C;
+            --ex-brown: #8B4513;
+            --ex-dark-gray: #706F6F;
+            --ex-light-gray: #BEBEBE;
+            --ex-gold: #B8860B;
+            --ex-silver: #A8A8A8;
+        }
+
+        body {
+            font-family: 'Yoon Gothic 120', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, var(--ex-dark-blue) 0%, var(--ex-blue) 50%, var(--ex-dark-gray) 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+        }
+
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 280px;
+            height: 100vh;
+            background: rgba(43, 76, 140, 0.95);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        .sidebar-content {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .logo {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            min-height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            margin-right: 12px;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, var(--ex-blue) 0%, var(--ex-gold) 100%);
+        }
+
+        .logo h1 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 2px;
+        }
+
+        .logo-subtitle {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 400;
+        }
+
+        .nav-section {
+            flex: 1;
+            padding: 16px 0;
+        }
+
+        .nav-group {
+            margin-bottom: 20px;
+        }
+
+        .nav-group-title {
+            padding: 8px 20px;
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 500;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            position: relative;
+        }
+
+        .menu-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+        }
+
+        .menu-item.active {
+            background: rgba(0, 116, 217, 0.15);
+            color: var(--ex-blue);
+            border-right: 2px solid var(--ex-blue);
+        }
+
+        .menu-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .page-title {
+            font-size: 2.5rem;
+            font-weight: 300;
+            color: #ffffff;
+            margin: 0;
+        }
+
+        .admin-badge {
+            background: rgba(227, 30, 36, 0.2);
+            border: 1px solid var(--ex-red);
+            color: var(--ex-red);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            font-weight: 400;
+        }
+
+        .stat-change {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+
+        .stat-change.positive {
+            background: rgba(40, 167, 69, 0.2);
+            color: #28a745;
+        }
+
+        .stat-change.negative {
+            background: rgba(220, 53, 69, 0.2);
+            color: #dc3545;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 24px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .chart-control-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .chart-control-btn:hover,
+        .chart-control-btn.active {
+            background: rgba(255, 255, 255, 0.3);
+            color: #ffffff;
+        }
+
+        .chart-area {
+            height: 300px;
+            position: relative;
+        }
+
+        .data-management {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .data-card {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .data-card h3 {
+            color: #ffffff;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .upload-area {
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            margin-bottom: 16px;
+        }
+
+        .upload-area:hover {
+            border-color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+            opacity: 0.7;
+        }
+
+        .upload-text {
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 8px;
+        }
+
+        .upload-subtext {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.8rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #ffffff;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: var(--ex-blue);
+            border-color: var(--ex-blue);
+        }
+
+        .btn-primary:hover {
+            background: rgba(0, 116, 217, 0.8);
+        }
+
+        .btn-danger {
+            background: var(--ex-red);
+            border-color: var(--ex-red);
+        }
+
+        .btn-danger:hover {
+            background: rgba(227, 30, 36, 0.8);
+        }
+
+        .data-table {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-top: 16px;
+        }
+
+        .table-header {
+            background: rgba(43, 76, 140, 0.3);
+            padding: 16px;
+            display: grid;
+            grid-template-columns: 1fr 120px 100px 100px;
+            gap: 16px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .table-row {
+            padding: 16px;
+            display: grid;
+            grid-template-columns: 1fr 120px 100px 100px;
+            gap: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .table-row:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .status-active {
+            background: rgba(40, 167, 69, 0.2);
+            color: #28a745;
+        }
+
+        .status-processing {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+        }
+
+        .status-error {
+            background: rgba(220, 53, 69, 0.2);
+            color: #dc3545;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                margin-left: 0;
+                padding: 20px;
+            }
+            
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            
+            .data-management {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+        }
+
+        .main-content::-webkit-scrollbar,
+        .sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .main-content::-webkit-scrollbar-track,
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .main-content::-webkit-scrollbar-thumb,
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-content">
+            <div class="logo">
+                <div class="logo-icon">⚙️</div>
+                <div>
+                    <h1>ex-GPT</h1>
+                    <div class="logo-subtitle">관리자 대시보드</div>
+                </div>
+            </div>
+            
+            <div class="nav-section">
+                <div class="nav-group">
+                    <div class="nav-group-title">대시보드</div>
+                    <div class="menu-item active" onclick="showSection('overview')">
+                        <div class="menu-icon">📊</div>
+                        <div>개요</div>
+                    </div>
+                    <div class="menu-item" onclick="showSection('monitoring')">
+                        <div class="menu-icon">📈</div>
+                        <div>실시간 모니터링</div>
+                    </div>
+                </div>
+                
+                <div class="nav-group">
+                    <div class="nav-group-title">데이터 관리</div>
+                    <div class="menu-item" onclick="showSection('data-management')">
+                        <div class="menu-icon">📚</div>
+                        <div>학습 데이터</div>
+                    </div>
+                    <div class="menu-item" onclick="showSection('documents')">
+                        <div class="menu-icon">📄</div>
+                        <div>문서 관리</div>
+                    </div>
+                    <div class="menu-item" onclick="showSection('backup')">
+                        <div class="menu-icon">💾</div>
+                        <div>백업 & 복원</div>
+                    </div>
+                </div>
+                
+                <div class="nav-group">
+                    <div class="nav-group-title">시스템</div>
+                    <div class="menu-item" onclick="showSection('users')">
+                        <div class="menu-icon">👥</div>
+                        <div>사용자 관리</div>
+                    </div>
+                    <div class="menu-item" onclick="showSection('settings')">
+                        <div class="menu-icon">⚙️</div>
+                        <div>시스템 설정</div>
+                    </div>
+                    <div class="menu-item" onclick="showSection('logs')">
+                        <div class="menu-icon">📋</div>
+                        <div>로그 관리</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="header">
+            <h1 class="page-title">대시보드 개요</h1>
+            <div class="admin-badge">🔑 관리자</div>
+        </div>
+        
+        <!-- 개요 섹션 -->
+        <div id="overview-section">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">📞</div>
+                        <div class="stat-change positive">+12%</div>
+                    </div>
+                    <div class="stat-value" id="totalRequests">1,247</div>
+                    <div class="stat-label">총 요청 수 (오늘)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-change positive">+5</div>
+                    </div>
+                    <div class="stat-value" id="activeUsers">24</div>
+                    <div class="stat-label">활성 사용자</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">🖥️</div>
+                        <div class="stat-change negative">-2%</div>
+                    </div>
+                    <div class="stat-value" id="gpuUsage">67%</div>
+                    <div class="stat-label">GPU 사용률</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">⚡</div>
+                        <div class="stat-change positive">+0.1%</div>
+                    </div>
+                    <div class="stat-value" id="uptime">99.8%</div>
+                    <div class="stat-label">시스템 가동률</div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">일일 사용량 통계</h3>
+                    <div class="chart-controls">
+                        <button class="chart-control-btn active">7일</button>
+                        <button class="chart-control-btn">30일</button>
+                        <button class="chart-control-btn">90일</button>
+                    </div>
+                </div>
+                <div class="chart-area">
+                    <canvas id="usageChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">GPU 실시간 모니터링</h3>
+                    <div class="chart-controls">
+                        <button class="chart-control-btn active">실시간</button>
+                        <button class="chart-control-btn">일시정지</button>
+                    </div>
+                </div>
+                <div class="chart-area">
+                    <canvas id="gpuChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 실시간 모니터링 섹션 -->
+        <div id="monitoring-section" style="display: none;">
+            <div class="data-management">
+                <div class="data-card">
+                    <h3>🖥️ 시스템 리소스</h3>
+                    <div style="margin-bottom: 20px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>CPU 사용률</span>
+                            <span id="cpu-usage">45%</span>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.2); height: 8px; border-radius: 4px;">
+                            <div style="background: var(--ex-blue); height: 100%; width: 45%; border-radius: 4px;"></div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>메모리 사용률</span>
+                            <span id="memory-usage">67%</span>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.2); height: 8px; border-radius: 4px;">
+                            <div style="background: var(--ex-gold); height: 100%; width: 67%; border-radius: 4px;"></div>
+                        </div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn" onclick="exportSystemReport()">📊 리포트 생성</button>
+                    </div>
+                </div>
+                
+                <div class="data-card">
+                    <h3>🔥 실시간 알림</h3>
+                    <div id="alert-list" style="max-height: 200px; overflow-y: auto;">
+                        <div style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            <div style="color: #28a745; font-size: 0.8rem;">09:45 - 정상</div>
+                            <div>GPU 사용률 정상 범위 복귀</div>
+                        </div>
+                        <div style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            <div style="color: #ffc107; font-size: 0.8rem;">09:32 - 경고</div>
+                            <div>GPU 사용률 80% 초과</div>
+                        </div>
+                        <div style="padding: 8px 0;">
+                            <div style="color: #28a745; font-size: 0.8rem;">09:15 - 정상</div>
+                            <div>시스템 백업 완료</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">네트워크 트래픽</h3>
+                </div>
+                <div class="chart-area">
+                    <canvas id="networkChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 학습 데이터 관리 섹션 -->
+        <div id="data-management-section" style="display: none;">
+            <div class="data-management">
+                <div class="data-card">
+                    <h3>📚 학습 데이터 업로드</h3>
+                    <div class="upload-area" onclick="uploadTrainingData()">
+                        <div class="upload-icon">📁</div>
+                        <div class="upload-text">파일을 클릭하거나 드래그하여 업로드</div>
+                        <div class="upload-subtext">PDF, HWP, DOCX, TXT 지원 (최대 100MB)</div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="uploadTrainingData()">📤 파일 업로드</button>
+                        <button class="btn" onclick="bulkUpload()">📦 일괄 업로드</button>
+                    </div>
+                </div>
+                
+                <div class="data-card">
+                    <h3>🔄 모델 재학습</h3>
+                    <div style="margin-bottom: 16px;">
+                        <div style="color: rgba(255, 255, 255, 0.8); margin-bottom: 8px;">마지막 학습: 2025-06-04 09:30</div>
+                        <div style="color: rgba(255, 255, 255, 0.6); font-size: 0.9rem;">다음 예정 학습: 2025-06-05 02:00</div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="startTraining()">🚀 즉시 재학습</button>
+                        <button class="btn" onclick="scheduleTraining()">⏰ 예약 설정</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">학습 데이터 목록</h3>
+                    <div class="chart-controls">
+                        <button class="btn" onclick="refreshDataList()">🔄 새로고침</button>
+                        <button class="btn btn-danger" onclick="deleteSelected()">🗑️ 선택 삭제</button>
+                    </div>
+                </div>
+                
+                <div class="data-table">
+                    <div class="table-header">
+                        <div>파일명</div>
+                        <div>업로드일</div>
+                        <div>크기</div>
+                        <div>상태</div>
+                    </div>
+                    <div class="table-row">
+                        <div>도로교통법_2025.pdf</div>
+                        <div>2025-06-04</div>
+                        <div>2.4MB</div>
+                        <div><span class="status-badge status-active">활성</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div>고속도로_안전규정.hwp</div>
+                        <div>2025-06-03</div>
+                        <div>1.8MB</div>
+                        <div><span class="status-badge status-active">활성</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div>업무매뉴얼_v2.docx</div>
+                        <div>2025-06-02</div>
+                        <div>3.1MB</div>
+                        <div><span class="status-badge status-processing">처리중</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 문서 관리 섹션 -->
+        <div id="documents-section" style="display: none;">
+            <div class="data-management">
+                <div class="data-card">
+                    <h3>📄 문서 검색</h3>
+                    <div style="margin-bottom: 16px;">
+                        <input type="text" placeholder="문서명 또는 키워드 검색..." style="width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 8px; outline: none;">
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="searchDocuments()">🔍 검색</button>
+                        <button class="btn" onclick="advancedSearch()">🎯 고급 검색</button>
+                    </div>
+                </div>
+                
+                <div class="data-card">
+                    <h3>📊 문서 통계</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 2rem; font-weight: 600; color: var(--ex-blue);">247</div>
+                            <div style="font-size: 0.9rem; color: rgba(255,255,255,0.7);">총 문서 수</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 2rem; font-weight: 600; color: var(--ex-gold);">89%</div>
+                            <div style="font-size: 0.9rem; color: rgba(255,255,255,0.7);">인덱싱 완료율</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">문서 카테고리별 분포</h3>
+                    <div class="chart-controls">
+                        <button class="btn" onclick="reindexDocuments()">🔄 재인덱싱</button>
+                        <button class="btn" onclick="exportDocumentList()">📋 목록 내보내기</button>
+                    </div>
+                </div>
+                <div class="chart-area">
+                    <canvas id="documentChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 백업 & 복원 섹션 -->
+        <div id="backup-section" style="display: none;">
+            <div class="data-management">
+                <div class="data-card">
+                    <h3>💾 자동 백업 설정</h3>
+                    <div style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <span>일일 자동 백업</span>
+                            <label style="position: relative; display: inline-block; width: 60px; height: 30px;">
+                                <input type="checkbox" checked style="opacity: 0; width: 0; height: 0;">
+                                <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--ex-blue); transition: 0.4s; border-radius: 30px;"></span>
+                                <span style="position: absolute; content: ''; height: 22px; width: 22px; left: 4px; bottom: 4px; background: white; transition: 0.4s; border-radius: 50%; transform: translateX(30px);"></span>
+                            </label>
+                        </div>
+                        <div style="color: rgba(255,255,255,0.7); font-size: 0.9rem;">마지막 백업: 2025-06-04 02:00</div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="createBackup()">💾 지금 백업</button>
+                        <button class="btn" onclick="configureBackup()">⚙️ 백업 설정</button>
+                    </div>
+                </div>
+                
+                <div class="data-card">
+                    <h3>📥 백업 복원</h3>
+                    <div class="upload-area" onclick="uploadBackupFile()">
+                        <div class="upload-icon">📦</div>
+                        <div class="upload-text">백업 파일을 선택하세요</div>
+                        <div class="upload-subtext">.backup 파일만 지원</div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="uploadBackupFile()">📥 복원하기</button>
+                        <button class="btn btn-danger" onclick="factoryReset()">🔄 공장 초기화</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">백업 히스토리</h3>
+                    <div class="chart-controls">
+                        <button class="btn" onclick="downloadBackup()">⬇️ 다운로드</button>
+                        <button class="btn btn-danger" onclick="deleteOldBackups()">🗑️ 오래된 백업 삭제</button>
+                    </div>
+                </div>
+                
+                <div class="data-table">
+                    <div class="table-header">
+                        <div>백업명</div>
+                        <div>생성일</div>
+                        <div>크기</div>
+                        <div>상태</div>
+                    </div>
+                    <div class="table-row">
+                        <div>auto_backup_20250604</div>
+                        <div>2025-06-04 02:00</div>
+                        <div>1.2GB</div>
+                        <div><span class="status-badge status-active">완료</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div>manual_backup_20250603</div>
+                        <div>2025-06-03 14:30</div>
+                        <div>1.1GB</div>
+                        <div><span class="status-badge status-active">완료</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div>auto_backup_20250603</div>
+                        <div>2025-06-03 02:00</div>
+                        <div>1.0GB</div>
+                        <div><span class="status-badge status-active">완료</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 사용자 관리 섹션 -->
+        <div id="users-section" style="display: none;">
+            <div class="data-management">
+                <div class="data-card">
+                    <h3>👤 새 사용자 추가</h3>
+                    <div style="margin-bottom: 16px;">
+                        <input type="text" placeholder="사용자명" style="width: 100%; padding: 12px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 8px; outline: none;">
+                        <input type="email" placeholder="이메일" style="width: 100%; padding: 12px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 8px; outline: none;">
+                        <select style="width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 8px; outline: none;">
+                            <option>관리자</option>
+                            <option>일반 사용자</option>
+                            <option>읽기 전용</option>
+                        </select>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="addUser()">➕ 사용자 추가</button>
+                        <button class="btn" onclick="importUsers()">📋 일괄 추가</button>
+                    </div>
+                </div>
+                
+                <div class="data-card">
+                    <h3>📊 사용자 현황</h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center;">
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 600; color: var(--ex-blue);">24</div>
+                            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">총 사용자</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 600; color: var(--ex-gold);">8</div>
+                            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">온라인</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 600; color: var(--ex-red);">3</div>
+                            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">관리자</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">사용자 목록</h3>
+                    <div class="chart-controls">
+                        <button class="btn" onclick="exportUserList()">📋 내보내기</button>
+                        <button class="btn btn-danger" onclick="deleteInactiveUsers()">🗑️ 비활성 삭제</button>
+                    </div>
+                </div>
+                
+                <div class="data-table">
+                    <div class="table-header">
+                        <div>사용자명</div>
+                        <div>이메일</div>
+                        <div>권한</div>
+                        <div>마지막 접속</div>
+                        <div>상태</div>
+                    </div>
+                    <div class="table-row">
+                        <div>김관리자</div>
+                        <div>admin@ex.co.kr</div>
+                        <div>관리자</div>
+                        <div>2025-06-04 09:45</div>
+                        <div><span class="status-badge status-active">온라인</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div>이도로</div>
+                        <div>road@ex.co.kr</div>
+                        <div>일반</div>
+                        <div>2025-06-04 09:30</div>
+                        <div><span class="status-badge status-active">온라인</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div>박고속</div>
+                        <div>highway@ex.co.kr</div>
+                        <div>일반</div>
+                        <div>2025-06-03 16:20</div>
+                        <div><span class="status-badge status-processing">오프라인</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 시스템 설정 섹션 -->
+        <div id="settings-section" style="display: none;">
+            <div class="data-management">
+                <div class="data-card">
+                    <h3>⚙️ 일반 설정</h3>
+                    <div style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <span>자동 업데이트</span>
+                            <label style="position: relative; display: inline-block; width: 60px; height: 30px;">
+                                <input type="checkbox" checked>
+                                <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--ex-blue); transition: 0.4s; border-radius: 30px;"></span>
+                            </label>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <span>사용 통계 수집</span>
+                            <label style="position: relative; display: inline-block; width: 60px; height: 30px;">
+                                <input type="checkbox" checked>
+                                <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: var(--ex-blue); transition: 0.4s; border-radius: 30px;"></span>
+                            </label>
+                        </div>
+                        <div style="margin-bottom: 12px;">
+                            <label style="display: block; margin-bottom: 8px;">최대 동시 사용자</label>
+                            <input type="number" value="50" style="width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 8px; outline: none;">
+                        </div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="saveSettings()">💾 설정 저장</button>
+                        <button class="btn" onclick="resetSettings()">🔄 기본값으로</button>
+                    </div>
+                </div>
+                
+                <div class="data-card">
+                    <h3>🔐 보안 설정</h3>
+                    <div style="margin-bottom: 16px;">
+                        <div style="margin-bottom: 12px;">
+                            <label style="display: block; margin-bottom: 8px;">세션 타임아웃 (분)</label>
+                            <input type="number" value="60" style="width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 8px; outline: none;">
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <span>2단계 인증</span>
+                            <label style="position: relative; display: inline-block; width: 60px; height: 30px;">
+                                <input type="checkbox">
+                                <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #ccc; transition: 0.4s; border-radius: 30px;"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="updateSecurity()">🔐 보안 업데이트</button>
+                        <button class="btn" onclick="viewSecurityLog()">📋 보안 로그</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">시스템 정보</h3>
+                    <div class="chart-controls">
+                        <button class="btn" onclick="checkUpdates()">🔄 업데이트 확인</button>
+                        <button class="btn" onclick="restartSystem()">🔄 시스템 재시작</button>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 12px;">
+                        <h4 style="margin-bottom: 16px; color: var(--ex-blue);">소프트웨어</h4>
+                        <div style="margin-bottom: 8px;">ex-GPT 버전: v1.2.3</div>
+                        <div style="margin-bottom: 8px;">Python: 3.9.7</div>
+                        <div style="margin-bottom: 8px;">CUDA: 11.8</div>
+                        <div>마지막 업데이트: 2025-05-28</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 12px;">
+                        <h4 style="margin-bottom: 16px; color: var(--ex-gold);">하드웨어</h4>
+                        <div style="margin-bottom: 8px;">CPU: Intel Xeon E5-2690</div>
+                        <div style="margin-bottom: 8px;">GPU: 2x RTX 4090</div>
+                        <div style="margin-bottom: 8px;">RAM: 128GB</div>
+                        <div>Storage: 2TB NVMe SSD</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 로그 관리 섹션 -->
+        <div id="logs-section" style="display: none;">
+            <div class="data-management">
+                <div class="data-card">
+                    <h3>🔍 로그 필터</h3>
+                    <div style="margin-bottom: 16px;">
+                        <select style="width: 100%; padding: 12px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 8px;">
+                            <option>모든 레벨</option>
+                            <option>ERROR</option>
+                            <option>WARNING</option>
+                            <option>INFO</option>
+                            <option>DEBUG</option>
+                        </select>
+                        <input type="date" style="width: 100%; padding: 12px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 8px;">
+                        <input type="text" placeholder="키워드 검색..." style="width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: white; border-radius: 8px; outline: none;">
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="filterLogs()">🔍 필터 적용</button>
+                        <button class="btn" onclick="clearLogFilter()">🔄 필터 초기화</button>
+                    </div>
+                </div>
+                
+                <div class="data-card">
+                    <h3>📊 로그 통계</h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; text-align: center;">
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 600; color: var(--ex-red);">12</div>
+                            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">오늘 에러</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 1.5rem; font-weight: 600; color: var(--ex-gold);">45</div>
+                            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">오늘 경고</div>
+                        </div>
+                    </div>
+                    <div class="action-buttons" style="margin-top: 16px;">
+                        <button class="btn" onclick="exportLogs()">📥 로그 내보내기</button>
+                        <button class="btn btn-danger" onclick="clearOldLogs()">🗑️ 오래된 로그 삭제</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">실시간 로그</h3>
+                    <div class="chart-controls">
+                        <button class="btn chart-control-btn active" onclick="toggleLogStream(true)">▶️ 실시간</button>
+                        <button class="btn chart-control-btn" onclick="toggleLogStream(false)">⏸️ 일시정지</button>
+                    </div>
+                </div>
+                
+                <div id="log-container" style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 16px; height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.85rem; line-height: 1.4;">
+                    <div style="color: #28a745; margin-bottom: 4px;">[2025-06-04 10:32:15] INFO - 사용자 로그인: admin@ex.co.kr</div>
+                    <div style="color: #ffc107; margin-bottom: 4px;">[2025-06-04 10:31:58] WARNING - GPU 메모리 사용률 85% 초과</div>
+                    <div style="color: #17a2b8; margin-bottom: 4px;">[2025-06-04 10:31:45] INFO - 모델 추론 완료: 응답시간 2.3초</div>
+                    <div style="color: #dc3545; margin-bottom: 4px;">[2025-06-04 10:31:30] ERROR - 파일 업로드 실패: connection timeout</div>
+                    <div style="color: #28a745; margin-bottom: 4px;">[2025-06-04 10:31:12] INFO - 백업 작업 완료</div>
+                    <div style="color: #17a2b8; margin-bottom: 4px;">[2025-06-04 10:30:58] INFO - 새 사용자 등록: user123@ex.co.kr</div>
+                    <div style="color: #ffc107; margin-bottom: 4px;">[2025-06-04 10:30:45] WARNING - 디스크 공간 부족 (15% 남음)</div>
+                    <div style="color: #28a745; margin-bottom: 4px;">[2025-06-04 10:30:30] INFO - 시스템 상태 정상</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 전역 변수
+        let gpuChart, usageChart, networkChart, documentChart;
+        let currentSection = 'overview';
+        let logStreamActive = true;
+        
+        // 섹션 전환
+        function showSection(section) {
+            document.querySelectorAll('[id$="-section"]').forEach(el => {
+                el.style.display = 'none';
+            });
+            
+            const sectionEl = document.getElementById(section + '-section');
+            if (sectionEl) {
+                sectionEl.style.display = 'block';
+            }
+            
+            document.querySelectorAll('.menu-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.closest('.menu-item').classList.add('active');
+            
+            const titles = {
+                'overview': '대시보드 개요',
+                'monitoring': '실시간 모니터링',
+                'data-management': '학습 데이터 관리',
+                'documents': '문서 관리',
+                'backup': '백업 & 복원',
+                'users': '사용자 관리',
+                'settings': '시스템 설정',
+                'logs': '로그 관리'
+            };
+            document.querySelector('.page-title').textContent = titles[section] || '대시보드';
+            
+            currentSection = section;
+            
+            if (section === 'documents' && !documentChart) {
+                initDocumentChart();
+            }
+            if (section === 'monitoring' && !networkChart) {
+                initNetworkChart();
+            }
+        }
+        
+        // 실시간 데이터 로드
+        async function loadData() {
+            try {
+                const stats = {
+                    total_requests: Math.floor(Math.random() * 100) + 1200,
+                    active_users: Math.floor(Math.random() * 10) + 20,
+                    gpu_usage: Math.floor(Math.random() * 30) + 50,
+                    uptime: 99.7 + Math.random() * 0.2
+                };
+                
+                document.getElementById('totalRequests').textContent = stats.total_requests.toLocaleString();
+                document.getElementById('activeUsers').textContent = stats.active_users;
+                document.getElementById('gpuUsage').textContent = stats.gpu_usage + '%';
+                document.getElementById('uptime').textContent = stats.uptime.toFixed(1) + '%';
+                
+                const cpuUsage = Math.floor(Math.random() * 20) + 40;
+                const memoryUsage = Math.floor(Math.random() * 20) + 60;
+                if (document.getElementById('cpu-usage')) {
+                    document.getElementById('cpu-usage').textContent = cpuUsage + '%';
+                }
+                if (document.getElementById('memory-usage')) {
+                    document.getElementById('memory-usage').textContent = memoryUsage + '%';
+                }
+                
+                if (gpuChart && currentSection === 'overview') {
+                    const now = new Date().toLocaleTimeString();
+                    gpuChart.data.labels.push(now);
+                    gpuChart.data.datasets[0].data.push(stats.gpu_usage);
+                    gpuChart.data.datasets[1].data.push(Math.floor(Math.random() * 30) + 40);
+                    
+                    if (gpuChart.data.labels.length > 20) {
+                        gpuChart.data.labels.shift();
+                        gpuChart.data.datasets.forEach(dataset => dataset.data.shift());
+                    }
+                    gpuChart.update('none');
+                }
+                
+                if (networkChart && currentSection === 'monitoring') {
+                    const now = new Date().toLocaleTimeString();
+                    networkChart.data.labels.push(now);
+                    networkChart.data.datasets[0].data.push(Math.floor(Math.random() * 100) + 50);
+                    networkChart.data.datasets[1].data.push(Math.floor(Math.random() * 80) + 30);
+                    
+                    if (networkChart.data.labels.length > 20) {
+                        networkChart.data.labels.shift();
+                        networkChart.data.datasets.forEach(dataset => dataset.data.shift());
+                    }
+                    networkChart.update('none');
+                }
+                
+                if (logStreamActive && currentSection === 'logs') {
+                    addLogEntry();
+                }
+                
+            } catch (error) {
+                console.error('데이터 로드 오류:', error);
+            }
+        }
+        
+        // 차트 초기화
+        function initCharts() {
+            if (gpuChart) gpuChart.destroy();
+            if (usageChart) usageChart.destroy();
+            
+            const gpuCtx = document.getElementById('gpuChart').getContext('2d');
+            gpuChart = new Chart(gpuCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'GPU 0',
+                        data: [],
+                        borderColor: '#0074D9',
+                        backgroundColor: 'rgba(0, 116, 217, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'GPU 1',
+                        data: [],
+                        borderColor: '#B8860B',
+                        backgroundColor: 'rgba(184, 134, 11, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#ffffff' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: 'rgba(255, 255, 255, 0.7)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { color: 'rgba(255, 255, 255, 0.7)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+            
+            const usageCtx = document.getElementById('usageChart').getContext('2d');
+            usageChart = new Chart(usageCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['06-01', '06-02', '06-03', '06-04', '06-05', '06-06', '06-07'],
+                    datasets: [{
+                        label: '일일 요청수',
+                        data: [950, 1200, 1100, 1350, 1247, 980, 1150],
+                        backgroundColor: 'rgba(0, 116, 217, 0.8)',
+                        borderColor: '#0074D9',
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#ffffff' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: 'rgba(255, 255, 255, 0.7)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: 'rgba(255, 255, 255, 0.7)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 네트워크 차트 초기화
+        function initNetworkChart() {
+            if (networkChart) networkChart.destroy();
+            
+            const networkCtx = document.getElementById('networkChart').getContext('2d');
+            networkChart = new Chart(networkCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: '인바운드 (MB/s)',
+                        data: [],
+                        borderColor: '#28a745',
+                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: '아웃바운드 (MB/s)',
+                        data: [],
+                        borderColor: '#ffc107',
+                        backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#ffffff' } }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: 'rgba(255, 255, 255, 0.7)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: 'rgba(255, 255, 255, 0.7)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 문서 차트 초기화
+        function initDocumentChart() {
+            if (documentChart) documentChart.destroy();
+            
+            const documentCtx = document.getElementById('documentChart').getContext('2d');
+            documentChart = new Chart(documentCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['법률 문서', '규정', '매뉴얼', '기타'],
+                    datasets: [{
+                        data: [45, 78, 89, 35],
+                        backgroundColor: [
+                            'rgba(0, 116, 217, 0.8)',
+                            'rgba(184, 134, 11, 0.8)',
+                            'rgba(227, 30, 36, 0.8)',
+                            'rgba(112, 111, 111, 0.8)'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#ffffff', padding: 20 }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 로그 스트림 토글
+        function toggleLogStream(active) {
+            logStreamActive = active;
+            document.querySelectorAll('.chart-control-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+        
+        // 새 로그 항목 추가
+        function addLogEntry() {
+            const logContainer = document.getElementById('log-container');
+            if (!logContainer) return;
+            
+            const logTypes = [
+                { level: 'INFO', color: '#28a745', messages: ['사용자 로그인', '모델 추론 완료', '백업 작업 완료', '시스템 상태 정상'] },
+                { level: 'WARNING', color: '#ffc107', messages: ['GPU 메모리 사용률 높음', '디스크 공간 부족', '응답 시간 지연'] },
+                { level: 'ERROR', color: '#dc3545', messages: ['파일 업로드 실패', '데이터베이스 연결 오류', '모델 로드 실패'] }
+            ];
+            
+            const randomType = logTypes[Math.floor(Math.random() * logTypes.length)];
+            const randomMessage = randomType.messages[Math.floor(Math.random() * randomType.messages.length)];
+            const timestamp = new Date().toLocaleString('ko-KR', { 
+                year: 'numeric', month: '2-digit', day: '2-digit', 
+                hour: '2-digit', minute: '2-digit', second: '2-digit' 
+            });
+            
+            const logEntry = document.createElement('div');
+            logEntry.style.cssText = `color: ${randomType.color}; margin-bottom: 4px;`;
+            logEntry.textContent = `[${timestamp}] ${randomType.level} - ${randomMessage}`;
+            
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            
+            if (logContainer.children.length > 100) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+        
+        // 모든 기능 함수들
+        function uploadTrainingData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.pdf,.hwp,.docx,.txt';
+            input.multiple = true;
+            input.onchange = function(e) {
+                const files = Array.from(e.target.files);
+                files.forEach(file => simulateUpload(file));
+            };
+            input.click();
+        }
+        
+        function simulateUpload(file) {
+            showNotification(`📤 ${file.name} 업로드 완료`, 'success');
+        }
+        
+        function bulkUpload() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.webkitdirectory = true;
+            input.onchange = function(e) {
+                const files = Array.from(e.target.files);
+                showNotification(`📦 ${files.length}개 파일 일괄 업로드 시작`, 'info');
+            };
+            input.click();
+        }
+        
+        function startTraining() {
+            if (confirm('모델 재학습을 시작하시겠습니까? 이 작업은 약 30분이 소요됩니다.')) {
+                showNotification('🚀 모델 재학습이 시작되었습니다', 'success');
+            }
+        }
+        
+        function scheduleTraining() {
+            const time = prompt('재학습 예약 시간을 입력하세요 (예: 02:00):', '02:00');
+            if (time) {
+                showNotification(`⏰ 매일 ${time}에 자동 재학습이 예약되었습니다`, 'info');
+            }
+        }
+        
+        // 나머지 모든 함수들
+        function exportSystemReport() { showNotification('📊 시스템 리포트가 생성되었습니다', 'success'); }
+        function searchDocuments() { showNotification('🔍 문서 검색을 실행했습니다', 'info'); }
+        function advancedSearch() { showNotification('🎯 고급 검색 창을 열었습니다', 'info'); }
+        function reindexDocuments() { showNotification('🔄 문서 재인덱싱을 시작했습니다', 'info'); }
+        function exportDocumentList() { showNotification('📋 문서 목록을 내보냈습니다', 'success'); }
+        function createBackup() { showNotification('💾 백업을 시작했습니다', 'info'); }
+        function configureBackup() { showNotification('⚙️ 백업 설정을 열었습니다', 'info'); }
+        function uploadBackupFile() { 
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.backup';
+            input.click();
+        }
+        function factoryReset() { 
+            if (confirm('정말로 공장 초기화를 하시겠습니까? 모든 데이터가 삭제됩니다.')) {
+                showNotification('🔄 공장 초기화를 시작했습니다', 'warning');
+            }
+        }
+        function addUser() { showNotification('👤 새 사용자가 추가되었습니다', 'success'); }
+        function importUsers() { showNotification('📋 사용자 일괄 추가를 시작했습니다', 'info'); }
+        function saveSettings() { showNotification('💾 설정이 저장되었습니다', 'success'); }
+        function resetSettings() { showNotification('🔄 설정을 기본값으로 복원했습니다', 'info'); }
+        function updateSecurity() { showNotification('🔐 보안 설정이 업데이트되었습니다', 'success'); }
+        function viewSecurityLog() { showNotification('📋 보안 로그를 열었습니다', 'info'); }
+        function checkUpdates() { showNotification('🔄 업데이트를 확인했습니다', 'info'); }
+        function restartSystem() { 
+            if (confirm('시스템을 재시작하시겠습니까?')) {
+                showNotification('🔄 시스템 재시작을 시작했습니다', 'warning');
+            }
+        }
+        function filterLogs() { showNotification('🔍 로그 필터를 적용했습니다', 'info'); }
+        function clearLogFilter() { showNotification('🔄 로그 필터를 초기화했습니다', 'info'); }
+        function exportLogs() { showNotification('📥 로그를 내보냈습니다', 'success'); }
+        function clearOldLogs() { showNotification('🗑️ 오래된 로그를 삭제했습니다', 'success'); }
+        function refreshDataList() { showNotification('🔄 데이터 목록을 새로고침했습니다', 'info'); }
+        function deleteSelected() { showNotification('🗑️ 선택한 항목을 삭제했습니다', 'success'); }
+        function downloadBackup() { showNotification('⬇️ 백업 파일을 다운로드했습니다', 'success'); }
+        function deleteOldBackups() { showNotification('🗑️ 오래된 백업을 삭제했습니다', 'success'); }
+        function exportUserList() { showNotification('📋 사용자 목록을 내보냈습니다', 'success'); }
+        function deleteInactiveUsers() { showNotification('🗑️ 비활성 사용자를 삭제했습니다', 'success'); }
+        
+        // 알림 표시
+        function showNotification(message, type = 'info') {
+            const colors = {
+                'success': 'rgba(40, 167, 69, 0.9)',
+                'warning': 'rgba(255, 193, 7, 0.9)',
+                'error': 'rgba(220, 53, 69, 0.9)',
+                'info': 'rgba(0, 116, 217, 0.9)'
+            };
+            
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${colors[type]};
+                color: white;
+                padding: 16px 20px;
+                border-radius: 12px;
+                z-index: 10000;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                font-family: 'Noto Sans KR', sans-serif;
+                font-size: 14px;
+                max-width: 300px;
+                animation: slideIn 0.3s ease;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => {
+                    notification.remove();
+                }, 300);
+            }, 3000);
+        }
+        
+        // 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            initCharts();
+            loadData();
+            setInterval(loadData, 5000);
+        });
+        
+        // 차트 컨트롤 버튼 이벤트
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('chart-control-btn')) {
+                const parent = e.target.parentNode;
+                parent.querySelectorAll('.chart-control-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                e.target.classList.add('active');
+            }
+        });
+        
+        // 드래그 앤 드롭 지원
+        document.addEventListener('DOMContentLoaded', function() {
+            const uploadAreas = document.querySelectorAll('.upload-area');
+            
+            uploadAreas.forEach(area => {
+                area.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    this.style.borderColor = 'rgba(255, 255, 255, 0.7)';
+                    this.style.background = 'rgba(255, 255, 255, 0.1)';
+                });
+                
+                area.addEventListener('dragleave', function(e) {
+                    e.preventDefault();
+                    this.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                    this.style.background = 'transparent';
+                });
+                
+                area.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    this.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                    this.style.background = 'transparent';
+                    
+                    const files = Array.from(e.dataTransfer.files);
+                    files.forEach(file => {
+                        if (file.type.includes('pdf') || 
+                            file.name.endsWith('.hwp') || 
+                            file.type.includes('document') || 
+                            file.type.includes('text')) {
+                            simulateUpload(file);
+                        } else {
+                            showNotification('⚠️ 지원하지 않는 파일 형식입니다', 'warning');
+                        }
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+</html>
