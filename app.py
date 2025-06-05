@@ -47,6 +47,7 @@ import threading
 from queue import Queue, Empty
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from flask import Response
 
 # ============= Flask 앱 및 CORS 설정 =============
 app = Flask(__name__)
@@ -321,9 +322,11 @@ def query_ollama_streaming(prompt):
             "prompt": prompt,
             "stream": True,
             "options": {
-                "temperature": 0.7,
-                "num_predict": 500,
-                "num_ctx": 2048
+                "temperature": 0.1,      # 0.3에서 0.1로 감소 (더 빠름)
+                "num_predict": 150,      # 200에서 150으로 감소
+                "num_ctx": 512,          # 1024에서 512로 감소
+                "num_thread": 8,         # 스레드 수 추가
+                "repeat_penalty": 1.1    # 반복 방지
             }
         }
         
@@ -457,8 +460,20 @@ def index():
 def admin_dashboard():
     """관리자 대시보드"""
     try:
-        with open('paste.txt', 'r', encoding='utf-8') as f:
-            return f.read()
+        # 절대 경로로 파일 찾기
+        admin_file_path = '/mnt/c/projects/ex-gpt-demo/admin_dashboard.html'
+        
+        if os.path.exists(admin_file_path):
+            with open(admin_file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        else:
+            # 상대 경로도 시도
+            if os.path.exists('admin_dashboard.html'):
+                with open('admin_dashboard.html', 'r', encoding='utf-8') as f:
+                    return f.read()
+            else:
+                raise FileNotFoundError("관리자 대시보드 파일을 찾을 수 없습니다")
+                
     except Exception as e:
         logger.error(f"관리자 대시보드 오류: {str(e)}")
         return render_template_string("""
@@ -476,7 +491,11 @@ def admin_dashboard():
             <h1>EX-GPT 관리자 대시보드</h1>
             <div class="error">
                 <h3>⚠️ 관리자 대시보드 파일이 없습니다</h3>
-                <p>paste.txt 파일을 현재 디렉토리에 배치하세요.</p>
+                <p>admin_dashboard.html 파일이 다음 경로에 없습니다:</p>
+                <ul>
+                    <li>/mnt/c/projects/ex-gpt-demo/admin_dashboard.html</li>
+                    <li>현재 디렉토리/admin_dashboard.html</li>
+                </ul>
                 <p><a href="/">메인 페이지로 돌아가기</a></p>
             </div>
         </body>
@@ -595,10 +614,13 @@ def enhanced_text_chat():
 답변:"""
         
         # 3. 빠른 모드 또는 일반 모드로 응답 생성
+        # standard 모드일 때 더 간단한 프롬프트 사용
         if mode == 'think':
             ai_response = query_ollama_streaming(prompt)
         else:
-            ai_response = query_ollama_fast(prompt)  # 빠른 응답
+            # 더 간단한 프롬프트로 빠른 응답
+            simple_prompt = f"한국도로공사 AI입니다. 간단히 답변하세요: {message}"
+            ai_response = query_ollama_fast(simple_prompt)
         
         if not ai_response:
             if relevant_docs:
@@ -661,6 +683,52 @@ def enhanced_text_chat():
             'status': 'error',
             'processing_time': f"{processing_time:.2f}초"
         }), 500
+
+@app.route('/api/chat_stream', methods=['POST'])
+def chat_stream():
+    """스트리밍 채팅 API"""
+    def generate():
+        try:
+            data = request.json
+            message = data.get('message', '').strip()
+            mode = data.get('mode', 'standard')
+            
+            # 간단한 응답 생성
+            if mode == 'think':
+                prompt = f"<think>생각: {message}에 대해 분석</think>\n한국도로공사 AI입니다. {message}"
+            else:
+                prompt = f"한국도로공사 AI입니다. 간단히: {message}"
+            
+            # Ollama 스트리밍 호출
+            payload = {
+                "model": MODEL_NAME,
+                "prompt": prompt,
+                "stream": True,
+                "options": {
+                    "temperature": 0.1,
+                    "num_predict": 100,
+                    "num_ctx": 256
+                }
+            }
+            
+            response = requests.post(OLLAMA_API_URL, json=payload, stream=True, timeout=30)
+            
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        json_line = json.loads(line.decode('utf-8'))
+                        chunk = json_line.get("response", "")
+                        if chunk:
+                            yield f"data: {chunk}\n\n"
+                        if json_line.get("done"):
+                            break
+                    except:
+                        continue
+                        
+        except Exception as e:
+            yield f"data: 오류가 발생했습니다: {str(e)}\n\n"
+    
+    return Response(generate(), mimetype='text/plain')
 
 @app.route('/api/admin/dashboard_data', methods=['GET'])
 def get_dashboard_data():

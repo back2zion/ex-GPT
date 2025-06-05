@@ -784,11 +784,31 @@
 
             <!-- 사용자 계정 (하단) -->
             <div class="user-account">
-                <div class="user-info">
+                <div class="user-info" onclick="toggleUserMenu()">
                     <div class="user-avatar">도</div>
                     <div class="user-details">
                         <div class="user-name">도로공사 직원</div>
                         <div class="user-role">내부 사용자</div>
+                    </div>
+                </div>
+                
+                <!-- 호버 메뉴 -->
+                <div class="user-hover-menu" id="userHoverMenu">
+                    <div class="hover-menu-item" onclick="openProfile()">
+                        <span class="hover-icon">👤</span>
+                        <span>대화 저장</span>
+                    </div>
+                    <div class="hover-menu-item" onclick="openSettings()">
+                        <span class="hover-icon">📋</span>
+                        <span>대화 지장</span>
+                    </div>
+                    <div class="hover-menu-item" onclick="openHelp()">
+                        <span class="hover-icon">❓</span>
+                        <span>도움말</span>
+                    </div>
+                    <div class="hover-menu-item" onclick="logout()">
+                        <span class="hover-icon">📄</span>
+                        <span>정보</span>
                     </div>
                 </div>
             </div>
@@ -806,7 +826,7 @@
             <div class="messages-container" id="messagesContainer"></div>
             
             <div class="typing-indicator" id="typingIndicator">
-                <span class="typing-dots">AI가 답변을 생성하고 있습니다...</span>
+                AI가 답변을 생성하고 있습니다...
             </div>
             
             <div class="input-container">
@@ -882,7 +902,7 @@
             sendMessage();
         }
 
-        // 메시지 전송 함수
+        // 메시지 전송 함수 (스트리밍 지원)
         async function sendMessage() {
             const messageInput = document.getElementById('messageInput');
             const sendBtn = document.getElementById('sendBtn');
@@ -913,45 +933,97 @@
             try {
                 const startTime = Date.now();
                 
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({ 
-                        message: message,
-                        mode: currentMode,
-                        user_id: 'user_' + Date.now(),
-                        timestamp: new Date().toISOString()
-                    })
-                });
-
-                hideTyping();
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    const endTime = Date.now();
-                    const responseTime = ((endTime - startTime) / 1000).toFixed(1);
-                    
-                    // Think 모드인 경우 사고 과정 먼저 표시
-                    if (currentMode === 'think' && data.thinking_process) {
-                        addThinkingProcess(data.thinking_process);
-                    }
-                    
-                    // 메인 응답 표시
-                    addMessage(data.reply, 'assistant', data.sources || [], {
-                        responseTime: responseTime,
-                        documentsFound: data.documents_found,
-                        mode: currentMode
+                if (currentMode === 'standard') {
+                    // 일반 모드: 스트리밍 사용
+                    const response = await fetch('/api/chat_stream', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: message, mode: currentMode })
                     });
                     
-                    console.log('응답 완료:', data);
+                    hideTyping();
+                    
+                    if (response.ok) {
+                        // 스트리밍 처리
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        
+                        // 임시 메시지 생성
+                        const tempDiv = document.createElement('div');
+                        tempDiv.className = 'message assistant-message';
+                        tempDiv.innerHTML = '<div class="message-content streaming-content"></div>';
+                        messagesContainer.appendChild(tempDiv);
+                        
+                        const contentDiv = tempDiv.querySelector('.message-content');
+                        let fullText = '';
+                        
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            
+                            const chunk = decoder.decode(value);
+                            const lines = chunk.split('\n');
+                            
+                            for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                    const text = line.slice(6);
+                                    fullText += text;
+                                    contentDiv.innerHTML = fullText.replace(/\n/g, '<br>');
+                                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                                }
+                            }
+                        }
+                        
+                        const endTime = Date.now();
+                        const responseTime = ((endTime - startTime) / 1000).toFixed(1);
+                        console.log(`스트리밍 응답 완료: ${responseTime}초`);
+                        
+                    } else {
+                        addMessage('스트리밍 응답 오류가 발생했습니다.', 'assistant');
+                    }
+                    
                 } else {
-                    const errorData = await response.json().catch(() => ({}));
-                    const errorMessage = errorData.error || `서버 오류 (${response.status}): ${response.statusText}`;
-                    addMessage(errorMessage, 'assistant');
-                    console.error('API Error:', response.status, errorData);
+                    // Think 모드: 기존 방식 사용
+                    const response = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ 
+                            message: message,
+                            mode: currentMode,
+                            user_id: 'user_' + Date.now(),
+                            timestamp: new Date().toISOString()
+                        })
+                    });
+
+                    hideTyping();
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        const endTime = Date.now();
+                        const responseTime = ((endTime - startTime) / 1000).toFixed(1);
+                        
+                        // Think 모드인 경우 사고 과정 먼저 표시
+                        if (currentMode === 'think' && data.thinking_process) {
+                            addThinkingProcess(data.thinking_process);
+                        }
+                        
+                        // 메인 응답 표시
+                        addMessage(data.reply, 'assistant', data.sources || [], {
+                            responseTime: responseTime,
+                            documentsFound: data.documents_found,
+                            mode: currentMode
+                        });
+                        
+                        console.log('응답 완료:', data);
+                    } else {
+                        const errorData = await response.json().catch(() => ({}));
+                        const errorMessage = errorData.error || `서버 오류 (${response.status}): ${response.statusText}`;
+                        addMessage(errorMessage, 'assistant');
+                        console.error('API Error:', response.status, errorData);
+                    }
                 }
                 
             } catch (error) {
@@ -1105,6 +1177,55 @@
                 }
             });
         });
+
+        // 사용자 메뉴 토글
+        function toggleUserMenu() {
+            const menu = document.getElementById('userHoverMenu');
+            menu.classList.toggle('show');
+        }
+
+        // 메뉴 항목 함수들
+        function openProfile() {
+            console.log('대화 저장');
+            toggleUserMenu();
+        }
+
+        function openSettings() {
+            console.log('대화 지장');
+            toggleUserMenu();
+        }
+
+        function openHelp() {
+            console.log('도움말');
+            toggleUserMenu();
+        }
+
+        function logout() {
+            console.log('정보');
+            toggleUserMenu();
+        }
+
+        // 외부 클릭 시 메뉴 닫기
+        document.addEventListener('click', function(e) {
+            const userAccount = document.querySelector('.user-account');
+            const menu = document.getElementById('userHoverMenu');
+            
+            if (userAccount && !userAccount.contains(e.target)) {
+                menu.classList.remove('show');
+            }
+        });
+
+        // 사용자 메뉴 토글 함수 수정
+        function toggleUserMenu() {
+            const menu = document.getElementById('userHoverMenu');
+            if (menu.classList.contains('show')) {
+                menu.classList.remove('show');
+            } else {
+                menu.classList.add('show');
+            }
+        }
+
+
     </script>
 </body>
 </html>

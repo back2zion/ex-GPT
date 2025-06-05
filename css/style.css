@@ -54,14 +54,21 @@ body {
 }
 
 .logo-icon {
-    width: 40px;
-    height: 40px;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 16px;
+    margin-right: 12px;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: linear-gradient(135deg, var(--ex-blue) 0%, var(--ex-gold) 100%);
+    background-image: url('/images/ex-logo.png');  /* 경로 변경 */
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
 }
 
 .logo h1 {
@@ -369,4 +376,101 @@ body.light .question-btn:hover {
 
 .section.active {
     display: block;
+}
+/* 사용자 호버 메뉴 */
+.user-hover-menu {
+    position: absolute;
+    bottom: 80px;
+    left: 20px;
+    width: 160px;
+    background: rgba(43, 76, 140, 0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+    z-index: 1001;
+    pointer-events: none;  /* 이 줄 추가 */
+}
+
+.user-hover-menu.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;  /* 이 줄 추가 */
+}
+
+.hover-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    border-radius: 8px;
+    margin: 4px;
+}
+
+.hover-menu-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.hover-icon {
+    width: 16px;
+    margin-right: 10px;
+    font-size: 14px;
+}
+#typingIndicator {
+    padding: 16px 20px;
+    color: rgba(255, 255, 255, 0.6);
+    font-style: italic;
+    font-size: 14px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 12px;
+    margin: 10px auto;
+    max-width: 300px;
+    display: none;
+    white-space: nowrap;
+}
+
+.input-container {
+    position: relative;
+    max-width: 1400px;  /* 1000px에서 1400px로 확장 */
+    margin: 0 auto;
+    padding: 20px;
+    width: 95%;  /* 이 줄 추가 - 화면 너비의 95% 사용 */
+}
+
+/* 채팅 영역도 함께 확장 */
+.chat-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+    max-width: 1400px;  /* 800px에서 1400px로 확장 */
+    margin: 0 auto;
+    width: 100%;
+}
+
+.streaming-content {
+    position: relative;
+}
+
+.streaming-content::after {
+    content: '▋';
+    animation: blink 1s infinite;
+    color: var(--ex-blue);
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
 }
