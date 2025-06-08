@@ -48,6 +48,51 @@ from queue import Queue, Empty
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from flask import Response
+# CUDA PyTorch 환경에서 동작하는 음성 처리 시스템
+
+import torch
+import torch.nn as nn
+import os
+import gc
+import logging
+import threading
+import time
+from queue import Queue, Empty
+from concurrent.futures import ThreadPoolExecutor
+import tempfile
+import requests
+import json
+import librosa
+import noisereduce as nr
+from pydub import AudioSegment
+from pydub.silence import split_on_silence
+import numpy as np
+from datetime import datetime, timedelta
+import uuid
+# 음성 처리 관련 imports
+try:
+    from faster_whisper import WhisperModel
+    FASTER_WHISPER_AVAILABLE = True
+    logger.info("✅ Faster Whisper 사용 가능")
+except ImportError:
+    FASTER_WHISPER_AVAILABLE = False
+    logger.warning("⚠️ Faster Whisper 사용 불가")
+
+try:
+    import speech_recognition as sr
+    SPEECH_RECOGNITION_AVAILABLE = True
+    logger.info("✅ SpeechRecognition 사용 가능")
+except ImportError:
+    SPEECH_RECOGNITION_AVAILABLE = False
+    logger.warning("⚠️ SpeechRecognition 사용 불가")
+
+try:
+    from transformers import WhisperProcessor, WhisperForConditionalGeneration
+    TRANSFORMERS_AVAILABLE = True
+    logger.info("✅ Transformers Whisper 사용 가능")
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
+    logger.warning("⚠️ Transformers 사용 불가")
 
 # ============= Flask 앱 및 CORS 설정 =============
 app = Flask(__name__)
@@ -62,6 +107,8 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
+
+# 로깅 설정
 logger = logging.getLogger(__name__)
 
 # 글로벌 변수 - 듀얼 GPU 지원
@@ -86,12 +133,49 @@ stats_data = {
 # 업로드 세션 관리
 upload_sessions = {}
 
+# ============================================================================
+# STEP 2: 전역 변수 섹션에 추가
+# ============================================================================
 # 글로벌 변수 선언
 qdrant_client = None
 embedding_model = None
 whisper_model = None
 optimized_ollama = None
 gpu_ollama = None
+
+# 음성 처리 모델들
+faster_whisper_model = None
+transformers_whisper_model = None
+transformers_processor = None
+speech_recognizer = None
+
+
+# 음성 처리 설정
+AUDIO_SETTINGS = {
+    'sample_rate': 16000,
+    'channels': 1,
+    'bit_depth': 16,
+    'format': 'wav'
+}
+
+WHISPER_OPTIONS = {
+    'language': 'ko',
+    'temperature': 0.0,
+    'beam_size': 5,
+    'condition_on_previous_text': True,
+    'compression_ratio_threshold': 2.4,
+    'logprob_threshold': -1.0,
+    'no_speech_threshold': 0.6
+}
+
+# 음성 처리 세션 관리
+audio_processing_sessions = {}
+audio_processing_lock = Lock()
+
+# ============================================================================
+# STEP 3: 음성 처리 함수들 추가
+# ============================================================================
+
 
 # 대화 히스토리 관리
 conversation_history = {}
@@ -217,26 +301,294 @@ def search_documents(query, limit=5):
         logger.error(f"❌ 검색 오류: {e}")
         return []
 
-# Whisper 모델 로드
+# 1. Faster Whisper 사용 (기존 PyTorch와 충돌 없음)
 try:
-    whisper_model = whisper.load_model("large")
-    logger.info("✅ Whisper large model loaded successfully")
-except Exception as e:
-    try:
-        whisper_model = whisper.load_model("medium")
-        logger.info("✅ Whisper medium model loaded successfully")
-    except Exception as e2:
-        whisper_model = whisper.load_model("small")
-        logger.info("✅ Whisper small model loaded successfully")
+    from faster_whisper import WhisperModel
+    FASTER_WHISPER_AVAILABLE = True
+    logger.info("✅ Faster Whisper 사용 가능")
+except ImportError:
+    FASTER_WHISPER_AVAILABLE = False
+    logger.warning("⚠️ Faster Whisper 사용 불가")
+
+# 2. SpeechRecognition 백업 옵션
+try:
+    import speech_recognition as sr
+    SPEECH_RECOGNITION_AVAILABLE = True
+    logger.info("✅ SpeechRecognition 사용 가능")
+except ImportError:
+    SPEECH_RECOGNITION_AVAILABLE = False
+    logger.warning("⚠️ SpeechRecognition 사용 불가")
+
+# 3. Hugging Face Transformers 사용 (PyTorch 기반)
+try:
+    from transformers import pipeline, WhisperProcessor, WhisperForConditionalGeneration
+    TRANSFORMERS_AVAILABLE = True
+    logger.info("✅ Transformers Whisper 사용 가능")
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
+    logger.warning("⚠️ Transformers 사용 불가")
+
+# 글로벌 모델 변수들
+faster_whisper_model = None
+transformers_whisper_model = None
+transformers_processor = None
+speech_recognizer = None
 
 # Ollama 설정
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "qwen3:8b"
 ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'm4a', 'wav', 'flac', 'aac', 'ogg', 'wma'}
 
+
+
+def transcribe_with_faster_whisper(audio_path):
+    """Faster Whisper로 음성 인식"""
+    if not faster_whisper_model:
+        return None
+    
+    try:
+        logger.info("🔄 Faster Whisper STT 시작...")
+        
+        segments, info = faster_whisper_model.transcribe(
+            audio_path,
+            language="ko",
+            beam_size=5,
+            temperature=0.0,
+            condition_on_previous_text=True,
+            compression_ratio_threshold=2.4,
+            logprob_threshold=-1.0,
+            no_speech_threshold=0.6
+        )
+        
+        # 세그먼트들을 텍스트로 결합
+        transcription = ""
+        for segment in segments:
+            transcription += segment.text + " "
+        
+        transcription = transcription.strip()
+        logger.info(f"✅ Faster Whisper STT 완료: {len(transcription)}자")
+        return transcription
+        
+    except Exception as e:
+        logger.error(f"❌ Faster Whisper STT 오류: {e}")
+        return None
+
+def transcribe_with_transformers(audio_path):
+    """Transformers Whisper로 음성 인식"""
+    if not transformers_whisper_model or not transformers_processor:
+        return None
+    
+    try:
+        logger.info("🔄 Transformers Whisper STT 시작...")
+        
+        # 오디오 로드 및 전처리
+        audio, sr_rate = librosa.load(audio_path, sr=16000)
+        
+        # 입력 특성 추출
+        input_features = transformers_processor(
+            audio, 
+            sampling_rate=16000, 
+            return_tensors="pt"
+        ).input_features
+        
+        # GPU로 이동
+        if torch.cuda.is_available():
+            input_features = input_features.to("cuda")
+        
+        # 강제로 한국어 토큰 설정
+        forced_decoder_ids = transformers_processor.get_decoder_prompt_ids(
+            language="korean", 
+            task="transcribe"
+        )
+        
+        # 추론 실행
+        with torch.no_grad():
+            predicted_ids = transformers_whisper_model.generate(
+                input_features, 
+                forced_decoder_ids=forced_decoder_ids,
+                max_length=448,
+                temperature=0.0,
+                do_sample=False
+            )
+        
+        # 디코딩
+        transcription = transformers_processor.batch_decode(
+            predicted_ids, 
+            skip_special_tokens=True
+        )[0]
+        
+        logger.info(f"✅ Transformers Whisper STT 완료: {len(transcription)}자")
+        return transcription.strip()
+        
+    except Exception as e:
+        logger.error(f"❌ Transformers Whisper STT 오류: {e}")
+        return None
+
 def allowed_audio_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_AUDIO_EXTENSIONS
 
+# ============================================================================
+# STEP 3: 음성 처리 함수들 추가
+# ============================================================================
+
+# 기존 함수들 아래에 추가하세요:
+
+def initialize_audio_models():
+    """음성 처리 모델들 초기화"""
+    global faster_whisper_model, transformers_whisper_model, transformers_processor, speech_recognizer
+    
+    models_loaded = []
+    
+    # Faster Whisper 초기화
+    if FASTER_WHISPER_AVAILABLE:
+        try:
+            if torch.cuda.is_available():
+                faster_whisper_model = WhisperModel("medium", device="cuda", compute_type="float16")
+                logger.info("✅ Faster Whisper GPU 모델 로드 성공")
+            else:
+                faster_whisper_model = WhisperModel("medium", device="cpu", compute_type="int8")
+                logger.info("✅ Faster Whisper CPU 모델 로드 성공")
+            models_loaded.append("faster_whisper")
+        except Exception as e:
+            logger.error(f"❌ Faster Whisper 로드 실패: {e}")
+    
+    # SpeechRecognition 초기화
+    if SPEECH_RECOGNITION_AVAILABLE:
+        try:
+            speech_recognizer = sr.Recognizer()
+            models_loaded.append("speech_recognition")
+            logger.info("✅ SpeechRecognition 초기화 성공")
+        except Exception as e:
+            logger.error(f"❌ SpeechRecognition 초기화 실패: {e}")
+    
+    logger.info(f"🎤 사용 가능한 STT 모델: {', '.join(models_loaded)}")
+    return len(models_loaded) > 0
+
+def transcribe_with_faster_whisper(audio_path):
+    """Faster Whisper로 음성 인식"""
+    if not faster_whisper_model:
+        return None
+    
+    try:
+        segments, info = faster_whisper_model.transcribe(
+            audio_path,
+            language="ko",
+            beam_size=5,
+            temperature=0.0
+        )
+        
+        transcription = ""
+        for segment in segments:
+            transcription += segment.text + " "
+        
+        return transcription.strip()
+        
+    except Exception as e:
+        logger.error(f"Faster Whisper STT 오류: {e}")
+        return None
+
+def transcribe_with_speech_recognition(audio_path):
+    """SpeechRecognition으로 음성 인식"""
+    if not speech_recognizer:
+        return None
+    
+    try:
+        # WAV 파일로 변환
+        audio = AudioSegment.from_file(audio_path)
+        wav_path = audio_path.rsplit('.', 1)[0] + '_sr.wav'
+        audio.export(wav_path, format="wav")
+        
+        # 음성 인식
+        with sr.AudioFile(wav_path) as source:
+            audio_data = speech_recognizer.record(source)
+        
+        transcription = speech_recognizer.recognize_google(
+            audio_data, 
+            language='ko-KR'
+        )
+        
+        # 임시 파일 정리
+        if os.path.exists(wav_path):
+            os.remove(wav_path)
+        
+        return transcription
+        
+    except Exception as e:
+        logger.error(f"SpeechRecognition STT 오류: {e}")
+        return None
+
+def transcribe_audio(audio_path):
+    """통합 음성 인식 함수"""
+    # Faster Whisper 우선 시도
+    if faster_whisper_model:
+        result = transcribe_with_faster_whisper(audio_path)
+        if result:
+            return enhance_transcription_quality(result)
+    
+    # 백업으로 SpeechRecognition 시도
+    if speech_recognizer:
+        result = transcribe_with_speech_recognition(audio_path)
+        if result:
+            return enhance_transcription_quality(result)
+    
+    return None
+
+def enhance_transcription_quality(text):
+    """전사 품질 향상"""
+    if not text:
+        return text
+    
+    import re
+    
+    # 기본 정리
+    text = text.strip()
+    
+    # 반복 구문 제거
+    sentences = text.split('. ')
+    unique_sentences = []
+    prev_sentence = ""
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if sentence and sentence != prev_sentence:
+            unique_sentences.append(sentence)
+            prev_sentence = sentence
+    
+    text = '. '.join(unique_sentences)
+    
+    # 문장 부호 정리
+    text = re.sub(r'\s+([,.!?])', r'\1', text)
+    text = re.sub(r'([,.!?])\s*([,.!?])', r'\1', text)
+    text = re.sub(r'\s+', ' ', text)
+    
+    if text and not text.endswith(('.', '!', '?')):
+        text += '.'
+    
+    return text
+
+def create_processing_session(user_id):
+    """오디오 처리 세션 생성"""
+    session_id = str(uuid.uuid4())
+    audio_processing_sessions[session_id] = {
+        'user_id': user_id,
+        'status': 'initialized',
+        'progress': 0,
+        'message': '처리 준비 중...',
+        'created_at': datetime.now(),
+        'result': None
+    }
+    return session_id
+
+def update_processing_session(session_id, status=None, progress=None, message=None, result=None):
+    """처리 세션 업데이트"""
+    if session_id in audio_processing_sessions:
+        session = audio_processing_sessions[session_id]
+        if status: session['status'] = status
+        if progress is not None: session['progress'] = progress
+        if message: session['message'] = message
+        if result: session['result'] = result
+        session['updated_at'] = datetime.now()
+        
 # GPU 가속 LLM 클래스 (수정된 버전)
 class GPUAcceleratedLLM:
     def __init__(self):
@@ -889,6 +1241,375 @@ def internal_error(error):
     logger.error(f"내부 서버 오류: {str(error)}")
     return jsonify({'error': 'Internal server error'}), 500
 
+@app.route('/images/<path:filename>')
+def serve_images(filename):
+    """이미지 파일 서비스"""
+    try:
+        # 절대 경로로 이미지 디렉토리 지정
+        image_directory = '/mnt/c/projects/ex-gpt-demo/images'
+        return send_from_directory(image_directory, filename)
+    except Exception as e:
+        logger.error(f"이미지 서비스 오류 ({filename}): {e}")
+        return jsonify({'error': f'Image not found: {filename}'}), 404
+ 
+@app.route('/api/upload_voice', methods=['POST'])
+def upload_voice():
+    """음성 파일 업로드 및 STT 처리"""
+    start_time = time.time()
+    session_id = None
+    
+    try:
+        # 파일 검증
+        if 'audio' not in request.files:
+            return jsonify({'error': '음성 파일이 없습니다.'}), 400
+        
+        file = request.files['audio']
+        if file.filename == '':
+            return jsonify({'error': '파일이 선택되지 않았습니다.'}), 400
+        
+        if not allowed_audio_file(file.filename):
+            return jsonify({'error': f'지원되지 않는 파일 형식입니다.'}), 400
+        
+        user_id = request.form.get('user_id', request.remote_addr)
+        process_type = request.form.get('type', 'transcribe')
+        
+        # 처리 세션 생성
+        session_id = create_processing_session(user_id)
+        
+        logger.info(f"🎤 음성 파일 업로드: {file.filename} (세션: {session_id})")
+        
+        # 임시 파일 저장
+        temp_dir = tempfile.mkdtemp()
+        filename = secure_filename(file.filename)
+        temp_file_path = os.path.join(temp_dir, filename)
+        file.save(temp_file_path)
+        
+        update_processing_session(session_id, 'uploading', 20, '파일 업로드 완료')
+        
+        try:
+            # 오디오 전처리
+            update_processing_session(session_id, 'preprocessing', 40, '오디오 전처리 중...')
+            processed_audio_path = preprocess_audio(temp_file_path)
+            
+            # STT 수행
+            update_processing_session(session_id, 'transcribing', 60, '음성 인식 중...')
+            transcription_result = transcribe_audio(processed_audio_path)
+            
+            if not transcription_result:
+                raise Exception('STT 처리에 실패했습니다.')
+            
+            # 후처리
+            update_processing_session(session_id, 'processing', 80, f'{process_type} 처리 중...')
+            processed_result = process_transcription(transcription_result, process_type)
+            
+            processing_time = time.time() - start_time
+            
+            # 결과 구성
+            final_result = {
+                'status': 'success',
+                'transcription': transcription_result,
+                'processed_content': processed_result,
+                'processing_time': f"{processing_time:.2f}초",
+                'session_id': session_id,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            update_processing_session(session_id, 'completed', 100, '처리 완료', final_result)
+            
+            # 로그 기록
+            log_request('음성', user_id, f'STT-{process_type}', 'success', f"{processing_time:.2f}초")
+            
+            return jsonify(final_result)
+            
+        finally:
+            # 임시 파일 정리
+            try:
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
+                if processed_audio_path and os.path.exists(processed_audio_path):
+                    os.remove(processed_audio_path)
+                if os.path.exists(temp_dir):
+                    os.rmdir(temp_dir)
+            except Exception as e:
+                logger.warning(f"임시 파일 정리 실패: {e}")
+                
+    except Exception as e:
+        processing_time = time.time() - start_time
+        error_message = f'음성 처리 중 오류가 발생했습니다: {str(e)}'
+        
+        logger.error(f"❌ 음성 처리 오류: {str(e)}")
+        
+        if session_id:
+            update_processing_session(session_id, 'error', 0, error_message)
+        
+        log_request('음성', request.remote_addr, 'STT 오류', 'error', f"{processing_time:.2f}초")
+        
+        return jsonify({
+            'error': error_message,
+            'status': 'error',
+            'processing_time': f"{processing_time:.2f}초",
+            'session_id': session_id
+        }), 500
+
+@app.route('/api/audio_progress/<session_id>', methods=['GET'])
+def get_audio_progress(session_id):
+    """오디오 처리 진행률 조회"""
+    session = audio_processing_sessions.get(session_id)
+    if not session:
+        return jsonify({'error': '세션을 찾을 수 없습니다.'}), 404
+    
+    return jsonify({
+        'session_id': session_id,
+        'status': session['status'],
+        'progress': session['progress'],
+        'message': session['message'],
+        'timestamp': session.get('updated_at', session['created_at']).isoformat()
+    })
+    
+def preprocess_audio(audio_path):
+    """오디오 전처리 (노이즈 제거, 포맷 변환 등)"""
+    try:
+        logger.info("🔧 오디오 전처리 시작...")
+        
+        # 오디오 로드
+        audio = AudioSegment.from_file(audio_path)
+        
+        # 스테레오를 모노로 변환
+        if audio.channels > 1:
+            audio = audio.set_channels(1)
+        
+        # 샘플레이트 16kHz로 변환 (Whisper 최적화)
+        audio = audio.set_frame_rate(16000)
+        
+        # 볼륨 정규화
+        audio = audio.normalize()
+        
+        # 무음 제거
+        chunks = split_on_silence(
+            audio,
+            min_silence_len=500,  # 0.5초 이상 무음
+            silence_thresh=audio.dBFS - 16,
+            keep_silence=250  # 0.25초 무음 유지
+        )
+        
+        if chunks:
+            audio = sum(chunks)
+        
+        # 전처리된 오디오 저장
+        processed_path = audio_path.replace('.', '_processed.')
+        if not processed_path.endswith('.wav'):
+            processed_path = processed_path.rsplit('.', 1)[0] + '.wav'
+        
+        audio.export(processed_path, format="wav")
+        
+        # 노이즈 리덕션 (선택적)
+        try:
+            import librosa
+            y, sr = librosa.load(processed_path, sr=16000)
+            y_reduced = nr.reduce_noise(y=y, sr=sr, prop_decrease=0.8)
+            
+            # 다시 저장
+            import soundfile as sf
+            sf.write(processed_path, y_reduced, sr)
+            
+        except Exception as e:
+            logger.warning(f"노이즈 리덕션 실패: {e}")
+        
+        logger.info("✅ 오디오 전처리 완료")
+        return processed_path
+        
+    except Exception as e:
+        logger.error(f"오디오 전처리 오류: {e}")
+        return audio_path  # 전처리 실패 시 원본 반환
+
+# Flask 앱 시작 시 모델 초기화
+def initialize_app_with_audio():
+    """Flask 앱 시작 시 호출할 초기화 함수"""
+    logger.info("🎤 음성 처리 시스템 초기화 시작...")
+    
+    # CUDA 환경 확인
+    if torch.cuda.is_available():
+        logger.info(f"✅ CUDA 사용 가능: {torch.cuda.get_device_name()}")
+        logger.info(f"📊 GPU 메모리: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}GB")
+    else:
+        logger.info("💻 CPU 모드로 실행")
+    
+    # 오디오 모델들 초기화
+    success = initialize_audio_models()
+    
+    if success:
+        logger.info("🎉 음성 처리 시스템 초기화 완료!")
+        return True
+    else:
+        logger.error("❌ 음성 처리 시스템 초기화 실패!")
+        return False
+
+# 메모리 관리 함수
+def cleanup_gpu_memory():
+    """GPU 메모리 정리"""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        gc.collect()
+        logger.info("🧹 GPU 메모리 정리 완료")
+
+logger.info("🎤 CUDA 호환 음성 처리 모듈 로드 완료")
+
+def transcribe_audio(audio_path):
+    """Whisper를 사용한 음성 인식"""
+    try:
+        if not whisper_model:
+            raise Exception("Whisper 모델이 로드되지 않았습니다.")
+        
+        logger.info("🎯 Whisper STT 실행...")
+        
+        # Whisper 옵션 설정
+        options = {
+            "language": "ko",  # 한국어 우선
+            "task": "transcribe",
+            "fp16": torch.cuda.is_available(),  # GPU 사용 시 FP16
+            "temperature": 0,  # 더 정확한 결과를 위해
+            "best_of": 2,
+            "beam_size": 5,
+            "patience": 1.0,
+            "length_penalty": -0.05,
+            "suppress_tokens": "-1",
+            "initial_prompt": "안녕하세요. 한국도로공사입니다."  # 컨텍스트 힌트
+        }
+        
+        # STT 수행
+        result = whisper_model.transcribe(audio_path, **options)
+        
+        # 결과 검증
+        text = result.get("text", "").strip()
+        if not text:
+            raise Exception("음성을 인식할 수 없습니다.")
+        
+        # 언어 감지 결과 로깅
+        detected_language = result.get("language", "unknown")
+        logger.info(f"🌐 감지된 언어: {detected_language}")
+        
+        if detected_language != "ko" and detected_language != "korean":
+            logger.warning(f"⚠️ 한국어가 아닌 언어가 감지되었습니다: {detected_language}")
+        
+        logger.info(f"✅ STT 완료: {len(text)}자")
+        return text
+        
+    except Exception as e:
+        logger.error(f"STT 처리 오류: {e}")
+        return None
+
+def process_transcription(text, process_type):
+    """STT 결과 후처리"""
+    try:
+        if process_type == "transcribe":
+            # 단순 전사
+            return format_transcription(text)
+            
+        elif process_type == "summarize":
+            # 요약 처리
+            return summarize_text(text)
+            
+        elif process_type == "analyze":
+            # 분석 처리
+            return analyze_speech_content(text)
+            
+        else:
+            return format_transcription(text)
+            
+    except Exception as e:
+        logger.error(f"후처리 오류: {e}")
+        return format_transcription(text)
+
+def format_transcription(text):
+    """전사 텍스트 포맷팅"""
+    # 기본 포맷팅
+    formatted = text.strip()
+    
+    # 문장 부호 추가
+    if formatted and not formatted.endswith(('.', '!', '?')):
+        formatted += '.'
+    
+    # 줄바꿈 처리
+    sentences = formatted.split('. ')
+    if len(sentences) > 3:
+        formatted = '. '.join(sentences[:len(sentences)//2]) + '.\n\n' + '. '.join(sentences[len(sentences)//2:])
+    
+    return formatted
+
+def summarize_text(text):
+    """텍스트 요약"""
+    try:
+        # Ollama를 사용한 요약
+        prompt = f"""다음 음성 전사 내용을 요약해주세요:
+
+원본 내용:
+{text}
+
+요약 지침:
+1. 핵심 내용만 간단히 정리
+2. 중요한 키워드 포함
+3. 3-5문장으로 요약
+4. 한국도로공사 업무와 관련된 내용이면 더 자세히
+
+요약:"""
+
+        summary = query_ollama_fast(prompt)
+        if summary:
+            return f"📝 **요약**\n\n{summary}\n\n---\n\n📄 **원본 전사**\n\n{format_transcription(text)}"
+        else:
+            return format_transcription(text)
+            
+    except Exception as e:
+        logger.error(f"요약 처리 오류: {e}")
+        return format_transcription(text)
+
+def analyze_speech_content(text):
+    """음성 내용 분석"""
+    try:
+        # 분석 프롬프트
+        prompt = f"""다음 음성 전사 내용을 분석해주세요:
+
+전사 내용:
+{text}
+
+분석 항목:
+1. 주요 주제
+2. 핵심 키워드
+3. 감정/톤
+4. 액션 아이템 (있다면)
+5. 한국도로공사 업무 관련성
+
+분석 결과:"""
+
+        analysis = query_ollama_fast(prompt)
+        if analysis:
+            return f"🔍 **음성 내용 분석**\n\n{analysis}\n\n---\n\n📄 **원본 전사**\n\n{format_transcription(text)}"
+        else:
+            return format_transcription(text)
+            
+    except Exception as e:
+        logger.error(f"분석 처리 오류: {e}")
+        return format_transcription(text)
+
+def get_audio_duration(audio_path):
+    """오디오 파일 길이 반환"""
+    try:
+        audio = AudioSegment.from_file(audio_path)
+        return round(len(audio) / 1000.0, 1)  # 초 단위
+    except:
+        return 0.0
+
+# 실시간 음성 처리를 위한 WebSocket 지원 (선택사항)
+@app.route('/api/voice_stream', methods=['POST'])
+def voice_stream():
+    """실시간 음성 스트리밍 처리"""
+    try:
+        # 실시간 음성 데이터 처리
+        # 구현 시 WebSocket이나 Server-Sent Events 사용 권장
+        return jsonify({"message": "실시간 음성 처리는 WebSocket으로 구현 예정"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+        
 # 주기적 정리 작업
 def cleanup_old_data():
     """오래된 데이터 정리"""
@@ -907,15 +1628,19 @@ def periodic_cleanup():
         time.sleep(3600)  # 1시간마다
         cleanup_old_data()
 
-# =============================================================================
-# 메인 실행
-# =============================================================================
+# ============================================================================
+# STEP 5: 메인 실행 부분 수정
+# ============================================================================
+
+# 기존 메인 실행 부분을 찾아서 수정하세요:
 
 if __name__ == '__main__':
     logger.info("🚀 EX-GPT 서버 시작...")
     
     # 1. CUDA 환경 검증
-    if not torch.cuda.is_available():
+    if torch.cuda.is_available():
+        logger.info(f"✅ CUDA 사용 가능: {torch.cuda.get_device_name()}")
+    else:
         logger.warning("⚠️ CUDA를 사용할 수 없습니다. CPU 모드로 실행합니다.")
     
     # 2. Qdrant 초기화
@@ -926,17 +1651,13 @@ if __name__ == '__main__':
     else:
         logger.warning("⚠️ Qdrant 초기화 실패. 문서 검색 기능이 제한됩니다.")
 
-    # 3. GPU LLM 초기화
-    try:
-        logger.info("🚀 GPU LLM 초기화...")
-        gpu_llm = GPUAcceleratedLLM()
-        if gpu_llm.initialized:
-            logger.info("✅ GPU LLM 준비 완료")
-        else:
-            logger.info("✅ GPU LLM 초기화 완료 (Ollama 폴백)")
-    except Exception as e:
-        logger.warning(f"⚠️ GPU LLM 초기화 실패: {e}")
-        gpu_llm = None
+    # 3. 음성 처리 모델 초기화 (새로 추가)
+    logger.info("🎤 음성 처리 모델 초기화...")
+    audio_success = initialize_audio_models()
+    if audio_success:
+        logger.info("✅ 음성 처리 준비 완료")
+    else:
+        logger.warning("⚠️ 음성 처리 초기화 실패. STT 기능이 제한됩니다.")
     
     # 4. 정리 작업 시작
     cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
@@ -948,6 +1669,6 @@ if __name__ == '__main__':
     logger.info("🔍 기능:")
     logger.info("   - ✅ 실시간 Ollama LLM 연동")
     logger.info("   - ✅ Qdrant 문서 검색")
-    logger.info("   - ✅ 음성 인식 및 요약")
+    logger.info("   - ✅ 음성 인식 및 요약")  # 새로 추가
     
     app.run(host='0.0.0.0', port=5001, debug=False, threaded=True)
