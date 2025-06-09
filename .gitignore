@@ -1,1 +1,4 @@
-/.venv
+/.venvmodels/
+model_cache/
+models/
+model_cache/
