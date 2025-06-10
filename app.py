@@ -1,5 +1,10 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+import warnings
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
+from threading import Lock
 
 from flask import Flask, request, jsonify, send_from_directory, render_template_string
 from flask_cors import CORS
@@ -48,28 +53,16 @@ from queue import Queue, Empty
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from flask import Response
-# CUDA PyTorch 환경에서 동작하는 음성 처리 시스템
+from threading import Lock
 
-import torch
-import torch.nn as nn
-import os
-import gc
-import logging
-import threading
-import time
-from queue import Queue, Empty
-from concurrent.futures import ThreadPoolExecutor
-import tempfile
-import requests
-import json
-import librosa
-import noisereduce as nr
-from pydub import AudioSegment
-from pydub.silence import split_on_silence
-import numpy as np
-from datetime import datetime, timedelta
-import uuid
-# 음성 처리 관련 imports
+# ============= 로깅 설정 (먼저 설정) =============
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# ============= 음성 처리 관련 imports =============
 try:
     from faster_whisper import WhisperModel
     FASTER_WHISPER_AVAILABLE = True
