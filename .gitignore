@@ -1,4 +1,16 @@
-/.venvmodels/
-model_cache/
+# Python 가상환경
+.venv/
+__pycache__/
+*.pyc
+
+# AI 모델 파일 (용량 큼)
 models/
 model_cache/
+*.bin
+*.safetensors
+
+# Poetry 락 파일
+poetry.lock
+
+# 기타
+.DS_Store
