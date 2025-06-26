@@ -1,0 +1,81 @@
+# GPU/CUDA 버전별 vLLM 컨테이너 설정
+# 환경에 맞는 이미지 선택하여 docker-compose.yaml에서 교체 사용
+
+# CUDA 12.8 (최신)
+# vllm:
+#   image: registry.cloud.neoali.com/datastreams/ex-gpt/vllm:cuda12.8-v0.9.0.1
+
+# CUDA 12.4 (안정화)  
+# vllm:
+#   image: registry.cloud.neoali.com/datastreams/ex-gpt/vllm:cuda12.4-v0.9.0.1
+
+# CUDA 12.1 (호환성)
+# vllm:
+#   image: registry.cloud.neoali.com/datastreams/ex-gpt/vllm:cuda12.1-v0.9.0.1
+
+# vLLM 버전별 설정
+# v0.9.0.1 (최신 - 권장)
+# v0.8.5.post1 (안정화)
+# v0.7.3 (레거시)
+
+# 사용 예시:
+# 1. nvidia-smi로 CUDA 버전 확인
+# 2. 해당하는 이미지로 docker-compose.yaml의 vllm 서비스 이미지 교체
+# 3. docker-compose up -d로 재시작
+
+services:
+  # CUDA 12.8 환경용 vLLM 설정
+  vllm-cuda128:
+    image: registry.cloud.neoali.com/datastreams/ex-gpt/vllm:cuda12.8-v0.9.0.1
+    command:
+      - --served-model-name
+      - default-model
+      - --model
+      - ${DEFAULT_MODEL:-Qwen/Qwen2.5-14B-Instruct}
+      - --gpu-memory-utilization
+      - "0.8"
+    restart: unless-stopped
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      CUDA_VISIBLE_DEVICES: "0"
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    profiles:
+      - cuda128
+
+  # CUDA 12.4 환경용 vLLM 설정  
+  vllm-cuda124:
+    image: registry.cloud.neoali.com/datastreams/ex-gpt/vllm:cuda12.4-v0.9.0.1
+    command:
+      - --served-model-name
+      - default-model
+      - --model
+      - ${DEFAULT_MODEL:-Qwen/Qwen2.5-14B-Instruct}
+      - --gpu-memory-utilization
+      - "0.8"
+    restart: unless-stopped
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      CUDA_VISIBLE_DEVICES: "0"
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    profiles:
+      - cuda124

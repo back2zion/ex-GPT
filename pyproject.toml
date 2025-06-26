@@ -1,0 +1,85 @@
+[tool.poetry]
+name = "ex-gpt"
+version = "1.0.0"
+description = "한국도로공사 ex-GPT 고도화 프로젝트"
+authors = ["DataStreams & NeoAli Team"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+pydantic = "^2.5.0"
+sqlalchemy = "^2.0.23"
+alembic = "^1.13.0"
+redis = "^5.0.1"
+celery = "^5.3.4"
+transformers = "^4.36.0"
+torch = "^2.1.0"
+accelerate = "^0.25.0"
+sentence-transformers = "^2.2.2"
+langchain = "^0.0.340"
+langchain-community = "^0.0.10"
+qdrant-client = "^1.7.0"
+chromadb = "^0.4.18"
+faiss-cpu = "^1.7.4"
+pypdf2 = "^3.0.1"
+python-docx = "^1.1.0"
+python-pptx = "^0.6.23"
+openpyxl = "^3.1.2"
+pandas = "^2.1.4"
+numpy = "^1.26.2"
+requests = "^2.31.0"
+httpx = "^0.25.2"
+aiofiles = "^23.2.0"
+python-multipart = "^0.0.6"
+openai-whisper = "^20231117"
+librosa = "^0.10.1"
+soundfile = "^0.12.1"
+python-dotenv = "^1.0.0"
+click = "^8.1.7"
+rich = "^13.7.0"
+tqdm = "^4.66.1"
+pyyaml = "^6.0.1"
+loguru = "^0.7.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-asyncio = "^0.21.1"
+pytest-cov = "^4.1.0"
+black = "^23.11.0"
+isort = "^5.13.0"
+flake8 = "^6.1.0"
+mypy = "^1.7.1"
+pre-commit = "^3.6.0"
+
+[tool.poetry.group.test.dependencies]
+httpx = "^0.25.2"
+pytest-mock = "^3.12.0"
+factory-boy = "^3.3.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --cov=src --cov-report=html --cov-report=term-missing"

@@ -1,0 +1,111 @@
+services:
+
+  api:
+    image: registry.cloud.neoali.com/datastreams/ex-gpt/ai-api:0.1.7
+    ports:
+      - "8081:80"
+    depends_on:
+      - qdrant
+      - minio-ex
+    environment:
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-Qwen/Qwen2.5-14B-Instruct}
+      - DEFAULT_EMBEDDINGS_MODEL=${DEFAULT_EMBEDDINGS_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+      - DEFAULT_RERANK_MODEL=${DEFAULT_RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      - CHAT_MODEL_ENDPOINT=${CHAT_MODEL_ENDPOINT:-http://vllm:8000/v1}
+      - EMBEDDING_MODEL_ENDPOINT=${EMBEDDING_MODEL_ENDPOINT:-http://vllm-embeddings:8000/v1}
+      - QDRANT_URL=http://qdrant:6333
+      - COLLECTION_NAME=default
+      - MINIO_ENDPOINT=http://minio:9000
+      - MODEL_SERVER_API_KEY=${MODEL_SERVER_API_KEY:-dummy-key}
+      - ENABLE_RERANK=${ENABLE_RERANK:-false}
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-false}
+    restart: unless-stopped
+    networks:
+      - ex-gpt-network
+
+  vllm:
+    image: vllm/vllm-openai:v0.7.3
+    command:
+      - --served-model-name
+      - default-model
+      - --model
+      - ${DEFAULT_MODEL:-Qwen/Qwen2.5-14B-Instruct}
+      - --gpu-memory-utilization
+      - "0.6"
+    restart: unless-stopped
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      CUDA_VISIBLE_DEVICES: "0"
+    ports:
+      - "8001:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    networks:
+      - ex-gpt-network
+
+  vllm-embeddings:
+    image: vllm/vllm-openai:v0.8.5.post1
+    command:
+      - --served-model-name
+      - default-model
+      - --model
+      - ${DEFAULT_EMBEDDINGS_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+      - --gpu-memory-utilization
+      - "0.4"
+    restart: unless-stopped
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      CUDA_VISIBLE_DEVICES: "1"
+    ports:
+      - "8101:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1']
+              capabilities: [gpu]
+    networks:
+      - ex-gpt-network
+
+  qdrant:
+    image: registry.cloud.neoali.com/datastreams/ex-gpt/qdrant:demo-v3
+    ports:
+      - "6334:6333"
+    restart: unless-stopped
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    networks:
+      - ex-gpt-network
+
+  minio-ex:
+    image: registry.cloud.neoali.com/datastreams/ex-gpt/minio:v1
+    ports:
+      - "9002:9000"
+      - "9092:9090"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-neoali}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-exgpt2025}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9090"
+    networks:
+      - ex-gpt-network
+
+networks:
+  ex-gpt-network:
+    driver: bridge
+
+volumes:
+  qdrant_storage:
+  minio_data:
