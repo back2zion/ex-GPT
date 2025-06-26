@@ -1,71 +1,215 @@
-# ex-GPT 고도화 프로젝트
+# ex-GPT Demo
 
-한국도로공사의 차세대 AI 기반 업무 지원 시스템
+🤖 **Open Source RAG-powered AI Assistant**
 
-## 🚀 빠른 시작
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![RAGFlow](https://img.shields.io/badge/RAG-RAGFlow-green.svg)](https://github.com/infiniflow/ragflow)
 
-### 1. Poetry 설치 (필요한 경우)
+## 🎯 Overview
+
+ex-GPT is a fully **open-source AI assistant** powered by RAGFlow, designed for document analysis, question answering, and intelligent conversation. This project demonstrates how to build a production-ready RAG system using only open-source components.
+
+### ✨ Key Features
+
+- 🔓 **100% Open Source**: No proprietary APIs or closed-source dependencies
+- 🏠 **Self-Hosted**: Complete control over your data and models
+- 🔄 **Dual RAG Support**: Choose between RAGFlow and DSRAG engines
+- 🖥️ **Modern UI**: Clean, responsive interface optimized for all devices
+- 📚 **Document Processing**: Support for PDF, DOCX, HWP, and more
+- 🚀 **Easy Deployment**: One-click setup with Docker
+- 💾 **CPU/GPU Support**: Works with or without GPU acceleration
+
+## 🚀 Quick Start
+
+### Option 1: CPU-Only Testing (No GPU Required)
+
+Perfect for testing the UI and basic functionality:
+
 ```bash
-curl -sSL https://install.python-poetry.org | python3 -
+# Windows
+.\start_cpu_test.bat
+
+# Linux/Mac
+chmod +x start_cpu_test.sh
+./start_cpu_test.sh
 ```
 
-### 2. 의존성 설치
+Then open: http://localhost:5001
+
+### Option 2: Full Setup with RAGFlow
+
+1. **Start RAGFlow**:
+   ```bash
+   # Windows
+   .\start_ragflow.bat
+   
+   # Linux/Mac
+   docker-compose -f docker-compose-ragflow.yaml up -d
+   ```
+
+2. **Configure RAGFlow**:
+   - Open: http://localhost:8080
+   - Create account and API key
+   - Create a chat assistant
+
+3. **Setup Environment**:
+   ```bash
+   cp .env.template .env
+   # Edit .env with your RAGFlow credentials
+   ```
+
+4. **Start ex-GPT**:
+   ```bash
+   python server.py
+   ```
+
+5. **Access**: http://localhost:5001
+
+## 📋 System Requirements
+
+### Minimum (CPU Testing)
+- Python 3.8+
+- 4GB RAM
+- 2GB disk space
+
+### Recommended (Full Setup)
+- Python 3.8+
+- 16GB RAM
+- 20GB disk space
+- GPU (optional, for better performance)
+
+## 🛠️ Installation
+
+### Dependencies
 ```bash
+# Install Python packages
+pip install -r requirements.txt
+
+# Or using Poetry
 poetry install
 ```
 
-### 3. 환경변수 설정
+### Docker Setup
 ```bash
-cp .env.template .env
-# .env 파일을 편집하여 필요한 값들을 설정
+# RAGFlow + Database
+docker-compose -f docker-compose-ragflow.yaml up -d
+
+# Optional: GPU-accelerated LLM
+docker-compose -f docker-compose-gpu-alternatives.yaml up -d
 ```
 
-### 4. 개발 서버 실행
+## 📁 Project Structure
+
+```
+ex-gpt-demo/
+├── 📄 README.md                    # This file
+├── 🚀 Quick Start Scripts
+│   ├── start_cpu_test.bat/.sh      # CPU-only testing
+│   ├── start_ragflow.bat           # RAGFlow server
+│   └── start_services.bat/.sh      # Full system startup
+├── 🐍 Backend
+│   ├── server.py                   # Main Flask server
+│   ├── test_server.py              # CPU testing server
+│   └── src/                        # Source modules
+├── 🎨 Frontend
+│   ├── index.html                  # Main UI
+│   ├── css/style.css               # Styling
+│   └── js/main.js                  # JavaScript
+├── 🐳 Docker
+│   ├── docker-compose-ragflow.yaml # RAGFlow setup
+│   └── docker-compose-*.yaml       # Various configurations
+├── 📚 Documentation
+│   ├── OPENSOURCE_LLM_SETUP.md     # LLM setup guide
+│   ├── RAGFLOW_INTEGRATION_GUIDE.md# RAGFlow guide
+│   └── README_CPU_TEST.md          # CPU testing guide
+└── 📋 Configuration
+    ├── .env.template               # Environment template
+    ├── requirements.txt            # Python dependencies
+    └── pyproject.toml             # Poetry configuration
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+Copy `.env.template` to `.env` and configure:
+
 ```bash
-poetry run python -m src.main
+# RAGFlow Configuration
+RAGFLOW_HOST=http://localhost:8080
+RAGFLOW_API_KEY=your_api_key_here
+RAGFLOW_ASSISTANT_ID=your_assistant_id_here
+
+# LLM Configuration (Optional)
+VLLM_BASE_URL=http://localhost:8000
+OLLAMA_BASE_URL=http://localhost:11434
+
+# Server Configuration
+FLASK_PORT=5001
+FLASK_DEBUG=false
 ```
 
-## 📁 프로젝트 구조
+## 🎮 Usage
 
-```
-ex-GPT/
-├── src/                    # 소스 코드
-│   ├── api/               # API 엔드포인트
-│   ├── core/              # 핵심 비즈니스 로직
-│   ├── rag/               # RAG 파이프라인
-│   ├── vector_db/         # 벡터 DB 인터페이스
-│   ├── llm/               # LLM 통신 모듈
-│   └── utils/             # 유틸리티 함수
-├── data/                  # 데이터 저장소
-├── models/                # 모델 파일
-├── config/                # 설정 파일
-├── tests/                 # 테스트 코드
-└── docs/                  # 문서
-```
+### Basic Chat
+1. Open http://localhost:5001
+2. Select RAG engine (RAGFlow/DSRAG)
+3. Type your question
+4. Get AI-powered responses
 
-## 🔧 개발 명령어
+### Document Upload
+1. Click upload button
+2. Select PDF, DOCX, or HWP files
+3. Wait for processing
+4. Ask questions about the documents
 
-```bash
-# 개발 서버 실행
-poetry run uvicorn src.main:app --reload
+### RAG Engine Selection
+- **RAGFlow**: Full-featured, production-ready
+- **DSRAG**: Lightweight alternative
 
-# 테스트 실행
-poetry run pytest
+## 🚨 Troubleshooting
 
-# 코드 포맷팅
-poetry run black src/
+### Common Issues
 
-# 타입 체킹
-poetry run mypy src/
-```
+1. **Port conflicts**: Change ports in docker-compose files
+2. **Memory issues**: Reduce model size or use CPU mode
+3. **Docker problems**: Check Docker Desktop is running
+4. **Package errors**: Use virtual environment
 
-## 📊 API 문서
+### Getting Help
 
-서버 실행 후 다음 URL에서 API 문서를 확인할 수 있습니다:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+- 📖 Check documentation in project folder
+- 🐛 Report issues on GitHub
+- 💡 See example configurations
 
-## 👥 팀
+## 🤝 Contributing
 
-- **DataStreams**: 인프라, 데이터 파이프라인, API 개발
-- **NeoAli**: AI 모델, RAG 엔진, 벡터 DB 관리
+We welcome contributions! Please:
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## � License
+
+This project is licensed under the MIT License.
+
+## 🙏 Acknowledgments
+
+- [RAGFlow](https://github.com/infiniflow/ragflow) - Open source RAG engine
+- [vLLM](https://github.com/vllm-project/vllm) - High-performance LLM serving
+- [Ollama](https://ollama.ai/) - Local LLM runtime
+- [Qdrant](https://qdrant.tech/) - Vector database
+
+## � Support
+
+- 🌟 Star this repo if you find it helpful
+- 🐛 Report bugs via GitHub Issues
+- 💬 Join discussions in GitHub Discussions
+
+---
+
+**Made with ❤️ for the open source community**

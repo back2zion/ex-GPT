@@ -25,8 +25,16 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# RAG API 설정 (Docker 네트워크 기반)
-NEOALI_API_URL = "http://localhost:8081/v1/chat/"
+# RAGFlow 설정 (RAGFlow 통합을 사용하므로 직접 URL은 필요 없음)
+# DSRAG은 더 이상 사용하지 않음 - RAGFlow로 완전 교체
+
+# 사용자 선택에 따른 듀얼 RAG 지원
+DSRAG_API_URL = "http://localhost:8081/v1/chat/"  # DSRAG API (사용자 선택 시)
+RAGFLOW_API_URL = "http://localhost:8080"  # RAGFlow API (기본값)
+
+# 오픈소스 LLM 서버 설정
+VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8000")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 # 통계 데이터
 stats_data = {
@@ -38,6 +46,60 @@ stats_data = {
 
 # 대화 이력 저장 (세션별)
 conversation_history = {}
+
+def create_fallback_response(message, session_id, start_time, engine, reason):
+    """LLM/RAG 서비스가 없을 때 사용하는 폴백 응답"""
+    processing_time = time.time() - start_time
+    
+    # 간단한 키워드 기반 응답
+    fallback_replies = {
+        '안녕': '안녕하세요! ex-GPT입니다. 현재 AI 서비스가 시작 중입니다.',
+        '이름': '저는 ex-GPT입니다. AI 어시스턴트로 여러분을 도와드리겠습니다.',
+        '도움': 'ex-GPT는 질문 답변, 문서 분석, 정보 검색 등을 도와드립니다.',
+        '테스트': 'ex-GPT가 정상 작동 중입니다! 🚀',
+        '상태': '현재 시스템 상태: 온라인 ✅',
+        '시간': f'현재 시간: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
+    }
+    
+    # 키워드 매칭
+    response_text = None
+    for keyword, reply in fallback_replies.items():
+        if keyword in message:
+            response_text = reply
+            break
+    
+    # 기본 응답
+    if not response_text:
+        response_text = f"""안녕하세요! ex-GPT입니다. 🤖
+
+**현재 상황**: AI 모델이 시작 중입니다.
+
+**질문하신 내용**: {message}
+
+**가능한 작업**:
+- 파일 업로드 및 분석
+- 문서 검색 및 요약
+- 일반적인 질문 답변
+
+잠시 후 다시 시도해주시거나, 구체적인 질문을 해주세요!
+
+> 💡 **참고**: 시스템이 완전히 로드되면 더 자세한 답변을 제공할 수 있습니다."""
+    
+    # 대화 이력에 추가
+    add_to_conversation_history(session_id, message, response_text)
+    
+    return jsonify({
+        'reply': response_text,
+        'routing_info': {
+            'path': 'fallback',
+            'reason': reason,
+            'engine': engine
+        },
+        'session_id': session_id,
+        'processing_time': processing_time,
+        'sources': [],
+        'status': f'폴백 응답 ({reason})'
+    }), 200
 
 # 동적 패턴 학습 데이터
 pattern_learning_data = {
@@ -425,7 +487,7 @@ def filter_chinese_characters(text):
         "ไม", "包括", "任何", "禁止", "的", "语言", "字符", "不是", "讨论", "内容", "请", "继续",
         "使用", "交流", "将", "按照", "要求", "帮助", "今天", "想", "了解", "哪些", "关于",
         "日常", "感谢", "流程", "呢", "针对", "特定", "场合", "详细", "治疗", "理解", "集行",
-        "主管", "部门", "指定", "管理者", "影响", "严格", "귀", "ırım", "해결", "안되고", "있음",
+        "主管", "部门", "指定", "관리자", "영향", "엄격", "귀", "ırım", "해결", "안되고", "있음",
         "hoặc", "관련", "운영", "상황", "연관", "가장", "정확한", "얻기", "확인"
     ]
     
@@ -528,125 +590,220 @@ def index():
 
 @app.route('/api/chat', methods=['POST'])
 def chat_proxy():
-    """RAG RAG API로 프록시하는 채팅 엔드포인트"""
+    """RAGFlow 또는 DSRAG를 선택하여 사용하는 채팅 엔드포인트"""
     start_time = time.time()
     
     try:
-        # 요청 데이터 파싱 시도
+        # 요청 데이터 파싱
         try:
             data = request.get_json(force=True)
         except Exception as json_error:
             logger.error(f"JSON 파싱 오류: {str(json_error)}")
-            try:
-                # raw data로 시도
-                raw_data = request.get_data(as_text=True)
-                logger.info(f"Raw 요청 데이터: {raw_data}")
-                data = json.loads(raw_data)
-            except Exception as raw_error:
-                logger.error(f"Raw 데이터 파싱 오류: {str(raw_error)}")
-                return jsonify({'error': f'요청 데이터 파싱 실패: {str(json_error)}'}), 400
+            return jsonify({'error': f'요청 데이터 파싱 실패: {str(json_error)}'}), 400
         
         if not data:
             return jsonify({'error': '요청 데이터가 없습니다.'}), 400
         
-        # 요청 모드 및 세션 정보 확인
+        # 요청 데이터 추출
         message = data.get('message', '')
-        mode = data.get('mode', 'general')
-        force_rag = data.get('force_rag', False)
-        session_id = data.get('session_id', request.remote_addr)  # 세션 ID (기본값: IP)
+        session_id = data.get('session_id', request.remote_addr)
+        user_id = data.get('user_id', request.remote_addr)
+        rag_engine = data.get('rag_engine', 'ragflow')  # 기본값: RAGFlow
+        search_mode = data.get('search_mode', True)
         
-        # 대화 맥락 분석
-        context = analyze_conversation_context(session_id, message)
-        logger.info(f"🔍 대화 맥락: {context}")
+        if not message:
+            return jsonify({'error': '메시지가 없습니다.'}), 400
         
-        # 맥락 기반 라우팅 결정
-        routing_result = determine_routing_path(message, mode)
-        route_path = routing_result['path']
-        confidence = routing_result['confidence']
-        reasoning = routing_result['reasoning']
+        logger.info(f"💬 채팅 요청: RAG 엔진={rag_engine}, 메시지='{message[:50]}...'")
         
-        # 맥락이 있는 경우 query_expansion 우선 고려
-        if context['needs_expansion'] and context['has_context']:
-            route_path = 'query_expansion'
-            confidence = 'high'
-            reasoning = '대화 맥락 참조 질의'
-            logger.info(f"🔄 맥락 기반 라우팅 조정: query_expansion")
+        # 통계 업데이트
+        stats_data['active_users'].add(user_id)
+        stats_data['total_requests'] += 1
         
-        logger.info(f"📍 최종 라우팅 결정: {route_path} (신뢰도: {confidence}, 이유: {reasoning})")
+        # RAG 엔진에 따른 처리 분기
+        if rag_engine == 'ragflow':
+            # RAGFlow 사용
+            return handle_ragflow_chat(data, start_time, session_id, user_id, message)
+        elif rag_engine == 'dsrag':
+            # DSRAG 사용
+            return handle_dsrag_chat(data, start_time, session_id, user_id, message)
+        else:
+            return jsonify({
+                'error': f'지원하지 않는 RAG 엔진: {rag_engine}',
+                'response': '지원되는 RAG 엔진을 선택해주세요 (ragflow 또는 dsrag)'
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"채팅 엔드포인트 오류: {str(e)}")
+        stats_data['failed_requests'] += 1
+        
+        return jsonify({
+            'error': f'서버 오류: {str(e)}',
+            'response': '죄송합니다. 서버에 문제가 발생했습니다. 관리자에게 문의해주세요.'
+        }), 500
+
+def handle_ragflow_chat(data, start_time, session_id, user_id, message):
+    """RAGFlow를 사용한 채팅 처리"""
+    try:
+        # RAGFlow 활성화 여부 확인
+        if not RAGFLOW_ENABLED:
+            return create_fallback_response(message, session_id, start_time, 'ragflow', 'RAGFlow 서비스 비활성화')
+        
+        # RAGFlow 연결 상태 확인
+        try:
+            if not ragflow_integration.check_connection():
+                logger.error("RAGFlow 연결 실패")
+                return create_fallback_response(message, session_id, start_time, 'ragflow', 'RAGFlow 연결 실패')
+        except:
+            # 연결 확인 자체가 실패하는 경우
+            return create_fallback_response(message, session_id, start_time, 'ragflow', 'RAGFlow 연결 확인 실패')
+        
+        # 기본 어시스턴트 ID 확인
+        assistant_id = os.getenv('RAGFLOW_ASSISTANT_ID')
+        if not assistant_id:
+            logger.warning("기본 어시스턴트 ID가 설정되지 않음")
+            return create_fallback_response(message, session_id, start_time, 'ragflow', '어시스턴트 ID 미설정')
+        
+        # RAGFlow 채팅 API 호출
+        response_data = ragflow_integration.chat_with_assistant(
+            assistant_id=assistant_id,
+            message=message,
+            session_id=session_id
+        )
+        
+        if response_data and 'answer' in response_data:
+            answer = response_data['answer']
+            
+            # 대화 이력 업데이트
+            cleaned_response = add_to_conversation_history(session_id, message, answer)
+            
+            # 성공 통계 업데이트
+            stats_data['successful_requests'] += 1
+            processing_time = time.time() - start_time
+            
+            return jsonify({
+                'reply': cleaned_response,
+                'routing_info': {
+                    'path': 'ragflow_chat',
+                    'reason': 'RAGFlow 채팅 API 호출',
+                    'confidence': 'high',
+                    'engine': 'ragflow'
+                },
+                'session_id': session_id,
+                'processing_time': processing_time,
+                'reference_documents': response_data.get('reference', [])
+            })
+        else:
+            raise Exception("RAGFlow 응답 형식 오류")
+            
+    except Exception as e:
+        logger.error(f"RAGFlow 채팅 오류: {e}")
+        stats_data['failed_requests'] += 1
+        
+        return jsonify({
+            'error': f'RAGFlow 채팅 오류: {str(e)}',
+            'response': 'RAGFlow 서비스에 일시적인 문제가 있습니다. 잠시 후 다시 시도해주세요.',
+            'routing_info': {
+                'path': 'error',
+                'reason': 'RAGFlow API 오류',
+                'engine': 'ragflow'
+            }
+        }), 500
+
+def handle_dsrag_chat(data, start_time, session_id, user_id, message):
+    """DSRAG를 사용한 채팅 처리 (폴백 시스템 포함)"""
+    try:
+        logger.info(f"💬 DSRAG API 호출")
         
         # 대화 이력 구성
         history = get_conversation_history(session_id)
+        full_history = history + [{
+            "role": "user",
+            "content": message
+        }]
         
-        # 라우팅 경로별 처리
-        if route_path == 'rag_search':
-            # RAG 검색 경로 - 대화 이력 포함
-            full_history = history + [{
-                "role": "user",
-                "content": message
-            }]
-            neoali_payload = {
-                "history": full_history,
-                "stream": False,
-                "search_documents": True,
-                "return_documents": True,
-                "include_default_system_prompt": True
-            }
-            use_rag = True
-        elif route_path == 'query_expansion':
-            # 질의 확장 경로 - 맥락을 고려한 확장
-            if context['has_context']:
-                expanded_query = expand_query_with_context(message, context)
-            else:
-                expanded_query = expand_query(message)
+        dsrag_payload = {
+            "history": full_history,
+            "stream": False,
+            "search_documents": True,
+            "return_documents": True,
+            "include_default_system_prompt": True
+        }
+        
+        # DSRAG API 호출 시도
+        try:
+            response = requests.post(
+                DSRAG_API_URL,
+                json=dsrag_payload,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                timeout=10
+            )
+        except requests.exceptions.ConnectionError:
+            # DSRAG 연결 실패시 폴백 응답
+            return create_fallback_response(message, session_id, start_time, 'dsrag', 'DSRAG 연결 실패')
+        
+        processing_time = time.time() - start_time
+        
+        if response.status_code == 200:
+            result = response.json()
             
-            full_history = history + [{
-                "role": "user",
-                "content": expanded_query
-            }]
-            neoali_payload = {
-                "history": full_history,
-                "stream": False,
-                "search_documents": True,
-                "return_documents": True,
-                "include_default_system_prompt": True
-            }
-            use_rag = True
-        elif route_path == 'mcp_action':
-            # 특수 기능 경로 - 현재는 일반 LLM으로 처리하고 향후 확장
-            neoali_payload = None
-            use_rag = False
-        else:
-            # direct_llm 경로 - 대화 이력 포함
-            neoali_payload = None
-            use_rag = False
-        
-        user_id = data.get('user_id', request.remote_addr)
-        stats_data['active_users'].add(user_id)
-        
-        if use_rag and neoali_payload:
-            logger.info(f"💬 채팅 요청 -> RAG RAG API (한국도로공사 문서 검색)")
-            
-            # RAG RAG API 호출 시도
-            try:
-                response = requests.post(
-                    NEOALI_API_URL,
-                    json=neoali_payload,
-                    headers={
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+            # 응답 처리
+            if 'response' in result:
+                answer = result['response']
+                
+                # 대화 이력 업데이트
+                cleaned_response = add_to_conversation_history(session_id, message, answer)
+                
+                # 성공 통계 업데이트
+                stats_data['successful_requests'] += 1
+                
+                return jsonify({
+                    'reply': cleaned_response,
+                    'routing_info': {
+                        'path': 'dsrag',
+                        'reason': 'DSRAG API 호출',
+                        'confidence': 'high',
+                        'engine': 'dsrag'
                     },
-                    timeout=30
-                )
-            except requests.exceptions.ConnectionError:
-                # RAG API 연결 실패시 직접 vLLM 호출
-                logger.warning("RAG API 연결 실패, vLLM 직접 호출로 전환")
-                use_rag = False
-        
-        if not use_rag:
-            logger.info(f"💬 일반 대화 요청 -> vLLM 직접 호출")
+                    'session_id': session_id,
+                    'processing_time': processing_time,
+                    'sources': result.get('sources', [])
+                })
+            else:
+                raise Exception("DSRAG 응답 형식 오류")
+        else:
+            raise Exception(f"DSRAG API 오류: HTTP {response.status_code}")
             
-            # 대화 이력을 vLLM 형식으로 변환
-            system_prompt = """You are ex-GPT, an AI assistant for Korea Expressway Corporation (한국도로공사).
+    except requests.exceptions.ConnectionError:
+        logger.error("DSRAG 연결 실패")
+        stats_data['failed_requests'] += 1
+        
+        return jsonify({
+            'error': 'DSRAG 서비스에 연결할 수 없습니다.',
+            'response': 'DSRAG 서비스가 실행 중인지 확인해주세요. 서비스를 시작하거나 잠시 후 다시 시도해주세요.',
+            'routing_info': {
+                'path': 'error',
+                'reason': 'DSRAG 연결 실패',
+                'engine': 'dsrag'
+            }
+        }), 503
+        
+    except Exception as e:
+        logger.error(f"DSRAG 채팅 오류: {e}")
+        stats_data['failed_requests'] += 1
+        
+        return jsonify({
+            'error': f'DSRAG 채팅 오류: {str(e)}',
+            'response': 'DSRAG 서비스에 일시적인 문제가 있습니다. 잠시 후 다시 시도해주세요.',
+            'routing_info': {
+                'path': 'error',
+                'reason': 'DSRAG API 오류',
+                'engine': 'dsrag'
+            }
+        }), 500
 
 ## Core Identity
 - Role: Professional Korean expressway expert assistant
@@ -690,6 +847,7 @@ PROCEDURE_TEMPLATE = "## {title}\\n\\n### 📋 절차 개요\\n{overview}\\n\\n#
 4. Professional and helpful tone
 5. Remember conversation context
 6. Structure responses with clear sections using headers"""
+
             messages = [{"role": "system", "content": system_prompt}]
             
             # 대화 이력 추가 (최근 5턴만)
@@ -710,7 +868,7 @@ PROCEDURE_TEMPLATE = "## {title}\\n\\n### 📋 절차 개요\\n{overview}\\n\\n#
             
             try:
                 response = requests.post(
-                    "http://localhost:8000/v1/chat/completions",
+                    f"{VLLM_BASE_URL}/v1/chat/completions",
                     json=vllm_payload,
                     headers={
                         'Content-Type': 'application/json',
@@ -770,7 +928,7 @@ RESPONSE FORMAT:
                 
                 try:
                     vllm_response = requests.post(
-                        "http://localhost:8000/v1/chat/completions",
+                        f"{VLLM_BASE_URL}/v1/chat/completions",
                         json=vllm_payload,
                         headers={
                             'Content-Type': 'application/json',
@@ -926,7 +1084,7 @@ PROCEDURE_TEMPLATE = "## {title}\\n\\n### 📋 절차 개요\\n{overview}\\n\\n#
                         
                         try:
                             vllm_response = requests.post(
-                                "http://localhost:8000/v1/chat/completions",
+                                f"{VLLM_BASE_URL}/v1/chat/completions",
                                 json=vllm_payload,
                                 headers={
                                     'Content-Type': 'application/json',
@@ -1026,22 +1184,41 @@ PROCEDURE_TEMPLATE = "## {title}\\n\\n### 📋 절차 개요\\n{overview}\\n\\n#
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """서버 상태 확인"""
+    """서버 상태 확인 - 듀얼 RAG 지원"""
     try:
-        # RAG 서버 상태 확인
-        neoali_status = "unknown"
+        # RAGFlow 상태 확인
+        ragflow_status = "disabled"
+        if RAGFLOW_ENABLED and ragflow_integration:
+            try:
+                is_connected = ragflow_integration.check_connection()
+                ragflow_status = "connected" if is_connected else "disconnected"
+            except Exception as e:
+                ragflow_status = f"error: {str(e)}"
+        
+        # DSRAG 상태 확인
+        dsrag_status = "unknown"
         try:
-            health_response = requests.get("http://localhost:8080/health", timeout=5)
+            health_response = requests.get(f"{DSRAG_API_URL.replace('/v1/chat/', '')}/health", timeout=5)
             if health_response.status_code == 200:
-                neoali_status = "connected"
+                dsrag_status = "connected"
             else:
-                neoali_status = "error"
+                dsrag_status = "error"
         except:
-            neoali_status = "disconnected"
+            dsrag_status = "disconnected"
         
         return jsonify({
             'status': 'healthy',
-            'neoali_rag_status': neoali_status,
+            'rag_engines': {
+                'ragflow': {
+                    'status': ragflow_status,
+                    'enabled': RAGFLOW_ENABLED,
+                    'host': os.getenv("RAGFLOW_HOST", "http://localhost:8080")
+                },
+                'neoali': {
+                    'status': neoali_status,
+                    'host': NEOALI_API_URL
+                }
+            },
             'total_requests': stats_data['total_requests'],
             'active_users': len(stats_data['active_users']),
             'timestamp': datetime.now().isoformat()
@@ -1149,6 +1326,250 @@ def test_endpoint():
         ]
     })
 
+# ============================================================================
+# RAGFlow API 엔드포인트들
+# ============================================================================
+
+@app.route('/api/ragflow/status', methods=['GET'])
+def ragflow_status():
+    """RAGFlow 서비스 상태 확인"""
+    if not RAGFLOW_ENABLED:
+        return jsonify({
+            'success': False,
+            'message': 'RAGFlow 통합이 비활성화되어 있습니다',
+            'enabled': False
+        }), 503
+    
+    try:
+        is_connected = ragflow_integration.check_connection()
+        return jsonify({
+            'success': True,
+            'connected': is_connected,
+            'enabled': True,
+            'host': ragflow_integration.ragflow_host,
+            'message': 'RAGFlow 연결 성공' if is_connected else 'RAGFlow 연결 실패'
+        })
+    except Exception as e:
+        logger.error(f"RAGFlow 상태 확인 오류: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'enabled': True,
+            'connected': False
+        }), 500
+
+@app.route('/api/ragflow/knowledge-base', methods=['POST'])
+def create_knowledge_base():
+    """지식베이스 생성"""
+    if not RAGFLOW_ENABLED:
+        return jsonify({'success': False, 'message': 'RAGFlow 통합이 비활성화되어 있습니다'}), 503
+    
+    try:
+        data = request.get_json()
+        name = data.get('name')
+        description = data.get('description', '')
+        
+        if not name:
+            return jsonify({'success': False, 'message': '지식베이스 이름이 필요합니다'}), 400
+        
+        kb_id = ragflow_integration.create_knowledge_base(name, description)
+        
+        if kb_id:
+            return jsonify({
+                'success': True,
+                'knowledge_base_id': kb_id,
+                'message': '지식베이스가 성공적으로 생성되었습니다'
+            })
+        else:
+            return jsonify({'success': False, 'message': '지식베이스 생성에 실패했습니다'}), 500
+            
+    except Exception as e:
+        logger.error(f"지식베이스 생성 오류: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ragflow/upload', methods=['POST'])
+def upload_document():
+    """문서 업로드"""
+    if not RAGFLOW_ENABLED:
+        return jsonify({'success': False, 'message': 'RAGFlow 통합이 비활성화되어 있습니다'}), 503
+    
+    try:
+        # 파일 업로드 처리
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'message': '파일이 없습니다'}), 400
+        
+        file = request.files['file']
+        dataset_id = request.form.get('dataset_id')
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'message': '파일이 선택되지 않았습니다'}), 400
+        
+        if not dataset_id:
+            return jsonify({'success': False, 'message': '데이터셋 ID가 필요합니다'}), 400
+        
+        # 임시 파일로 저장
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as tmp_file:
+            file.save(tmp_file.name)
+            
+            # RAGFlow에 업로드
+            doc_id = ragflow_integration.upload_document(dataset_id, tmp_file.name)
+            
+            # 임시 파일 삭제
+            os.unlink(tmp_file.name)
+            
+            if doc_id:
+                return jsonify({
+                    'success': True,
+                    'document_id': doc_id,
+                    'message': '문서가 성공적으로 업로드되었습니다'
+                })
+            else:
+                return jsonify({'success': False, 'message': '문서 업로드에 실패했습니다'}), 500
+                
+    except Exception as e:
+        logger.error(f"문서 업로드 오류: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ragflow/parse', methods=['POST'])
+def parse_documents():
+    """문서 파싱"""
+    if not RAGFLOW_ENABLED:
+        return jsonify({'success': False, 'message': 'RAGFlow 통합이 비활성화되어 있습니다'}), 503
+    
+    try:
+        data = request.get_json()
+        dataset_id = data.get('dataset_id')
+        document_ids = data.get('document_ids', [])
+        
+        if not dataset_id or not document_ids:
+            return jsonify({'success': False, 'message': '데이터셋 ID와 문서 ID가 필요합니다'}), 400
+        
+        success = ragflow_integration.parse_document(dataset_id, document_ids)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': '문서 파싱이 시작되었습니다'
+            })
+        else:
+            return jsonify({'success': False, 'message': '문서 파싱 시작에 실패했습니다'}), 500
+            
+    except Exception as e:
+        logger.error(f"문서 파싱 오류: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ragflow/search', methods=['POST'])
+def search_documents():
+    """문서 검색"""
+    if not RAGFLOW_ENABLED:
+        return jsonify({'success': False, 'message': 'RAGFlow 통합이 비활성화되어 있습니다'}), 503
+    
+    try:
+        data = request.get_json()
+        dataset_id = data.get('dataset_id')
+        query = data.get('query')
+        top_k = data.get('top_k', 5)
+        
+        if not dataset_id or not query:
+            return jsonify({'success': False, 'message': '데이터셋 ID와 검색 쿼리가 필요합니다'}), 400
+        
+        results = ragflow_integration.search_documents(dataset_id, query, top_k)
+        
+        return jsonify({
+            'success': True,
+            'results': results,
+            'count': len(results),
+            'message': f'{len(results)}개의 검색 결과를 찾았습니다'
+        })
+        
+    except Exception as e:
+        logger.error(f"문서 검색 오류: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ragflow/assistant', methods=['POST'])
+def create_assistant():
+    """AI 어시스턴트 생성"""
+    if not RAGFLOW_ENABLED:
+        return jsonify({'success': False, 'message': 'RAGFlow 통합이 비활성화되어 있습니다'}), 503
+    
+    try:
+        data = request.get_json()
+        name = data.get('name')
+        dataset_ids = data.get('dataset_ids', [])
+        system_prompt = data.get('system_prompt', '')
+        
+        if not name or not dataset_ids:
+            return jsonify({'success': False, 'message': '어시스턴트 이름과 데이터셋 ID가 필요합니다'}), 400
+        
+        assistant_id = ragflow_integration.create_chat_assistant(name, dataset_ids, system_prompt)
+        
+        if assistant_id:
+            return jsonify({
+                'success': True,
+                'assistant_id': assistant_id,
+                'message': 'AI 어시스턴트가 성공적으로 생성되었습니다'
+            })
+        else:
+            return jsonify({'success': False, 'message': 'AI 어시스턴트 생성에 실패했습니다'}), 500
+            
+    except Exception as e:
+        logger.error(f"AI 어시스턴트 생성 오류: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ragflow/chat', methods=['POST'])
+def chat_with_ragflow():
+    """RAGFlow 어시스턴트와 채팅"""
+    if not RAGFLOW_ENABLED:
+        return jsonify({'success': False, 'message': 'RAGFlow 통합이 비활성화되어 있습니다'}), 503
+    
+    try:
+        data = request.get_json()
+        assistant_id = data.get('assistant_id')
+        message = data.get('message')
+        session_id = data.get('session_id')
+        
+        if not assistant_id or not message:
+            return jsonify({'success': False, 'message': '어시스턴트 ID와 메시지가 필요합니다'}), 400
+        
+        # 사용자 추적
+        user_id = request.headers.get('X-User-ID', 'anonymous')
+        stats_data['active_users'].add(user_id)
+        stats_data['total_requests'] += 1
+        
+        # RAGFlow 채팅
+        response = ragflow_integration.chat_with_assistant(assistant_id, message, session_id)
+        
+        if response:
+            stats_data['successful_requests'] += 1
+            
+            # 대화 이력 저장
+            session_key = f"ragflow_{assistant_id}_{session_id or 'default'}"
+            if session_key not in conversation_history:
+                conversation_history[session_key] = []
+            
+            conversation_history[session_key].append({
+                'timestamp': datetime.now().isoformat(),
+                'user_message': message,
+                'assistant_response': response,
+                'assistant_id': assistant_id
+            })
+            
+            return jsonify({
+                'success': True,
+                'response': response,
+                'session_id': session_id,
+                'message': 'RAGFlow 응답을 성공적으로 받았습니다'
+            })
+        else:
+            stats_data['failed_requests'] += 1
+            return jsonify({'success': False, 'message': 'RAGFlow 응답을 받을 수 없습니다'}), 500
+            
+    except Exception as e:
+        logger.error(f"RAGFlow 채팅 오류: {e}")
+        stats_data['failed_requests'] += 1
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # 오류 핸들러
 @app.route('/favicon.ico')
 def favicon():
@@ -1163,6 +1584,27 @@ def internal_error(error):
     logger.error(f"내부 서버 오류: {str(error)}")
     return jsonify({'error': 'Internal server error'}), 500
 
+# 정적 파일 서빙 라우트 추가
+@app.route('/images/<path:filename>')
+def serve_images(filename):
+    """이미지 파일 서빙"""
+    return send_from_directory('images', filename)
+
+@app.route('/css/<path:filename>')
+def serve_css(filename):
+    """CSS 파일 서빙"""
+    return send_from_directory('css', filename)
+
+@app.route('/js/<path:filename>')
+def serve_js(filename):
+    """JavaScript 파일 서빙"""
+    return send_from_directory('js', filename)
+
+@app.route('/favicon.ico')
+def serve_favicon():
+    """Favicon 서빙"""
+    return send_from_directory('.', 'favicon.ico')
+
 # ============================================================================
 # 메인 실행 부분 
 # ============================================================================
@@ -1172,5 +1614,30 @@ if __name__ == '__main__':
     logger.info("🔗 RAG API: http://localhost:8081")
     logger.info("📍 웹 서버: http://localhost:5001") 
     logger.info("🎉 준비 완료!")
+    
+# RAGFlow 통합 초기화 (서버 시작 전에 실행)
+try:
+    from src.rag.ragflow_integration import ExGPTRAGFlowIntegration
+    RAGFLOW_ENABLED = True
+    # RAGFlow 인스턴스 초기화
+    ragflow_integration = ExGPTRAGFlowIntegration(
+        ragflow_host=os.getenv("RAGFLOW_HOST", "http://localhost:8080"),
+        api_key=os.getenv("RAGFLOW_API_KEY")
+    )
+    logger.info("✅ RAGFlow 통합 모듈 로드 성공")
+except ImportError as e:
+    logger.warning(f"⚠️  RAGFlow 통합 모듈 로드 실패: {e}")
+    logger.warning("RAGFlow 통합 없이 서버를 시작합니다. 'pip install ragflow-sdk'로 설치해주세요.")
+    RAGFLOW_ENABLED = False
+    ragflow_integration = None
+except Exception as e:
+    logger.error(f"❌ RAGFlow 통합 초기화 오류: {e}")
+    RAGFLOW_ENABLED = False
+    ragflow_integration = None
+
+if __name__ == '__main__':
+    logger.info("🚀 ex-GPT 서버 시작 중...")
+    logger.info(f"서버 주소: http://localhost:5001")
+    logger.info(f"RAGFlow 통합: {'활성화' if RAGFLOW_ENABLED else '비활성화'}")
     
     app.run(host='0.0.0.0', port=5001, debug=False, threaded=True)

@@ -43,6 +43,10 @@ rich = "^13.7.0"
 tqdm = "^4.66.1"
 pyyaml = "^6.0.1"
 loguru = "^0.7.2"
+# RAGFlow integration
+ragflow-sdk = "^0.19.1"
+elasticsearch = "^8.11.0"
+xxhash = "^3.4.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"

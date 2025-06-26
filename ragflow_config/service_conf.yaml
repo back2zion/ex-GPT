@@ -1,0 +1,33 @@
+# RAGFlow 기본 LLM 설정
+user_default_llm:
+  # 기본 LLM 제공업체 설정
+  "factory": "OpenAI"
+  "api_key": "${OPENAI_API_KEY}"
+  "base_url": "https://api.openai.com/v1"
+  "model_name": "gpt-3.5-turbo"
+
+# 지원되는 LLM 목록
+supported_llms:
+  - name: "OpenAI GPT-3.5"
+    factory: "OpenAI"
+    model: "gpt-3.5-turbo"
+    api_key_env: "OPENAI_API_KEY"
+    base_url: "https://api.openai.com/v1"
+    
+  - name: "OpenAI GPT-4"
+    factory: "OpenAI" 
+    model: "gpt-4"
+    api_key_env: "OPENAI_API_KEY"
+    base_url: "https://api.openai.com/v1"
+    
+  - name: "Anthropic Claude"
+    factory: "Anthropic"
+    model: "claude-3-sonnet-20240229"
+    api_key_env: "ANTHROPIC_API_KEY"
+    base_url: "https://api.anthropic.com"
+    
+  - name: "Google Gemini"
+    factory: "Google"
+    model: "gemini-pro"
+    api_key_env: "GOOGLE_API_KEY"
+    base_url: "https://generativelanguage.googleapis.com"
