@@ -622,13 +622,88 @@
             text-align: center;
             color: #6b7280;
             padding: 40px 20px;
+            max-width: 800px;
+            margin: 0 auto;
         }
 
         .welcome-message h3 {
             color: var(--ex-blue);
             margin-bottom: 15px;
-            font-size: 1.5rem;
-            font-weight: 600;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .enterprise-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--ex-red), #dc2626);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(227, 30, 36, 0.3);
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .feature-item {
+            background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: left;
+            transition: all 0.3s ease;
+        }
+
+        .feature-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            border-color: var(--ex-blue);
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .feature-text {
+            line-height: 1.5;
+        }
+
+        .feature-text strong {
+            color: var(--ex-blue);
+            font-size: 1.1rem;
+        }
+
+        .getting-started {
+            background: linear-gradient(135deg, rgba(91, 155, 213, 0.1), rgba(227, 30, 36, 0.1));
+            border: 1px solid rgba(91, 155, 213, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+
+        .getting-started p {
+            margin: 8px 0;
+            font-size: 1rem;
+            color: #374151;
+        }
+
+        .getting-started kbd {
+            background: #374151;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            margin: 0 2px;
         }
 
         .welcome-message p {
@@ -747,10 +822,44 @@
 
                 <div class="messages-area" id="messagesArea">
                     <div class="welcome-message">
-                        <h3>ex-GPT에 오신 것을 환영합니다!</h3>
-                        <p>무엇이든 물어보세요. 도움을 드릴 준비가 되었습니다.</p>
-                        <p>🔍 문서 검색 모드: <strong>Ctrl+D</strong></p>
-                        <p>💬 일반 대화 모드: <strong>Ctrl+C</strong></p>
+                        <h3>ex-GPT Enterprise Edition</h3>
+                        <div class="enterprise-badge">🏢 ENTERPRISE</div>
+                        <p><strong>엔터프라이즈급 AI 어시스턴트 플랫폼</strong></p>
+                        <div class="feature-grid">
+                            <div class="feature-item">
+                                <div class="feature-icon">🤖</div>
+                                <div class="feature-text">
+                                    <strong>멀티 모델 AI</strong><br>
+                                    Ollama, OpenAI, Claude, Cohere
+                                </div>
+                            </div>
+                            <div class="feature-item">
+                                <div class="feature-icon">🔍</div>
+                                <div class="feature-text">
+                                    <strong>고급 RAG 검색</strong><br>
+                                    벡터 DB + 하이브리드 검색
+                                </div>
+                            </div>
+                            <div class="feature-item">
+                                <div class="feature-icon">🔐</div>
+                                <div class="feature-text">
+                                    <strong>엔터프라이즈 보안</strong><br>
+                                    JWT 인증 + 세션 관리
+                                </div>
+                            </div>
+                            <div class="feature-item">
+                                <div class="feature-icon">📊</div>
+                                <div class="feature-text">
+                                    <strong>실시간 분석</strong><br>
+                                    모니터링 + 성능 최적화
+                                </div>
+                            </div>
+                        </div>
+                        <div class="getting-started">
+                            <p><strong>시작하기:</strong></p>
+                            <p>🔍 문서 검색: <kbd>Ctrl+D</kbd> | 💬 대화 모드: <kbd>Ctrl+C</kbd></p>
+                            <p>⚡ 스트리밍: <kbd>Ctrl+S</kbd> | 🔄 새 세션: <kbd>Ctrl+N</kbd></p>
+                        </div>
                     </div>
                 </div>
 

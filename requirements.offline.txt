@@ -1,0 +1,36 @@
+# ex-GPT 완전 오프라인 환경 의존성
+# 최소한의 패키지로 구성, 외부 API 호출 없음
+
+# 핵심 웹 프레임워크
+Flask==3.0.0
+Flask-CORS==4.0.0
+
+# HTTP 클라이언트 (로컬 Ollama API용)
+requests==2.31.0
+
+# JSON/YAML 처리
+PyYAML==6.0.1
+
+# 환경변수 관리
+python-dotenv==1.0.0
+
+# 파일 처리
+Pillow==10.1.0
+
+# 보안 (해시/인증)
+werkzeug==3.0.1
+
+# 로깅
+colorlog==6.8.0
+
+# 벡터 검색 (선택사항, 로컬 Qdrant 사용시)
+# qdrant-client==1.7.0
+
+# 임베딩 (선택사항, 로컬 모델 사용시)
+# sentence-transformers==2.2.2
+
+# 오프라인 환경에서는 다음 패키지들이 불필요:
+# - openai (외부 API)
+# - anthropic (외부 API)  
+# - langchain (외부 의존성 많음)
+# - huggingface-hub (온라인 다운로드)

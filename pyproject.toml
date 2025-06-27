@@ -1,52 +1,53 @@
 [tool.poetry]
 name = "ex-gpt"
 version = "1.0.0"
-description = "한국도로공사 ex-GPT 고도화 프로젝트"
-authors = ["DataStreams & NeoAli Team"]
+description = "ex-GPT Enterprise AI Assistant Platform"
+authors = ["ex-GPT Team"]
 readme = "README.md"
 packages = [{include = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-fastapi = "^0.104.1"
-uvicorn = {extras = ["standard"], version = "^0.24.0"}
-pydantic = "^2.5.0"
-sqlalchemy = "^2.0.23"
-alembic = "^1.13.0"
-redis = "^5.0.1"
-celery = "^5.3.4"
-transformers = "^4.36.0"
-torch = "^2.1.0"
-accelerate = "^0.25.0"
-sentence-transformers = "^2.2.2"
-langchain = "^0.0.340"
-langchain-community = "^0.0.10"
-qdrant-client = "^1.7.0"
-chromadb = "^0.4.18"
-faiss-cpu = "^1.7.4"
+# 웹 프레임워크
+flask = "^3.0.0"
+flask-cors = "^4.0.0"
+# LangGraph 및 LangChain
+langgraph = "^0.2.20"
+langchain = "^0.2.16"
+langchain-core = "^0.2.38"
+langchain-community = "^0.2.16"
+langchain-openai = "^0.1.23"
+langchain-anthropic = "^0.1.23"
+# LLM 서버 통신
+openai = "^1.51.0"
+anthropic = "^0.34.2"
+# RAG 및 벡터 DB
+qdrant-client = "^1.11.3"
+sentence-transformers = "^3.1.1"
+# 문서 처리
 pypdf2 = "^3.0.1"
 python-docx = "^1.1.0"
 python-pptx = "^0.6.23"
 openpyxl = "^3.1.2"
-pandas = "^2.1.4"
-numpy = "^1.26.2"
-requests = "^2.31.0"
-httpx = "^0.25.2"
-aiofiles = "^23.2.0"
-python-multipart = "^0.0.6"
-openai-whisper = "^20231117"
-librosa = "^0.10.1"
-soundfile = "^0.12.1"
-python-dotenv = "^1.0.0"
-click = "^8.1.7"
-rich = "^13.7.0"
-tqdm = "^4.66.1"
-pyyaml = "^6.0.1"
+# 엔터프라이즈 기능
+pydantic = "^2.9.2"
+pydantic-settings = "^2.5.2"
+pyjwt = "^2.9.0"
+bcrypt = "^4.2.0"
+python-dotenv = "^1.0.1"
+# 모니터링 및 로깅
 loguru = "^0.7.2"
-# RAGFlow integration
-ragflow-sdk = "^0.19.1"
-elasticsearch = "^8.11.0"
-xxhash = "^3.4.1"
+prometheus-client = "^0.21.0"
+# 유틸리티
+requests = "^2.32.3"
+httpx = "^0.27.2"
+aiofiles = "^24.1.0"
+python-multipart = "^0.0.12"
+pyyaml = "^6.0.2"
+click = "^8.1.7"
+rich = "^13.8.1"
+# RAGFlow integration (optional)
+ragflow-sdk = {version = "^0.19.1", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
