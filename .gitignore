@@ -1,16 +1,103 @@
-# Python 가상환경
-.venv/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# AI 모델 파일 (용량 큼)
-models/
-model_cache/
-*.bin
-*.safetensors
-
-# Poetry 락 파일
+# Poetry
+.venv/
 poetry.lock
 
-# 기타
+# Environment variables
+.env
+.env.local
+.env.production
+.env.test
+*.env
+
+# AI/ML models and data
+*.bin
+*.safetensors
+*.pt
+*.pth
+models/
+checkpoints/
+data/raw/
+data/processed/
+*.pkl
+*.joblib
+
+# Vector databases
+qdrant_storage/
+vector_store/
+embeddings/
+
+# Logs and databases
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache
+.cache/
+*.cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ex-GPT specific
+# 한국도로공사 민감 정보
+config/secrets/
+api_keys/
+internal_docs/
+whisper_cache/
+gpu_logs/
+h100_monitoring/
+
+# 대용량 파일들
+*.wav
+*.mp3
+*.mp4
+*.avi
+*.pdf
+*.docx
+*.xlsx
+*.hwp
+
+# 임시 파일
+temp/
+tmp/
+*.tmp
+*.bak
