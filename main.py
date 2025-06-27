@@ -1,39 +1,4 @@
-﻿from fastapi import FastAPI
-import os
-from datetime import datetime
-
-app = FastAPI(
-    title="ex-GPT Permission Management API",
-    description="한국도로공사 ex-GPT 시스템 권한 관리 API",
-    version="1.0.0"
-)
-
-@app.get("/")
-async def root():
-    return {
-        "message": "ex-GPT Permission Management API",
-        "version": "1.0.0",
-        "status": "running",
-        "timestamp": datetime.now().isoformat(),
-        "docs": "/docs",
-        "health": "/api/v1/health"
-    }
-
-@app.get("/api/v1/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "components": {
-            "database": "healthy",
-            "redis": "healthy", 
-            "rag": "healthy"
-        }
-    }
-
-# main.py 업데이트
-@"
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query, BackgroundTasks, Request
+﻿from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Query, BackgroundTasks, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -46,7 +11,7 @@ import io
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# 기존 imports...
+# ex-GPT 모듈 imports
 from exgpt_auth.database import get_db, get_redis_client
 from exgpt_auth.models import User, DocumentPermission
 from exgpt_auth.permission_service import PermissionService
@@ -82,6 +47,18 @@ async def serve_main_page():
         <p>index.html 파일이 없습니다.</p>
         </body></html>
         ''')
+
+@app.get("/api/v1/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "components": {
+            "database": "healthy",
+            "redis": "healthy", 
+            "rag": "healthy"
+        }
+    }
 
 # 채팅 API 엔드포인트
 @app.post("/api/chat")
@@ -130,19 +107,6 @@ async def chat_endpoint(request: Request):
         logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"채팅 처리 오류: {str(e)}")
 
-# 기존 API 엔드포인트들...
-@app.get("/api/v1/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "components": {
-            "database": "healthy",
-            "redis": "healthy", 
-            "rag": "healthy"
-        }
-    }
-
 # 음성 업로드 API (UI에서 사용)
 @app.post("/api/upload_voice")
 async def upload_voice(audio: UploadFile = File(...), type: str = "transcribe", user_id: str = "anonymous"):
@@ -179,11 +143,6 @@ async def upload_voice(audio: UploadFile = File(...), type: str = "transcribe", 
     except Exception as e:
         logger.error(f"Voice upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"음성 처리 오류: {str(e)}")
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-"@ | Out-File -FilePath "main.py" -Encoding UTF8 -Force
 
 if __name__ == "__main__":
     import uvicorn
